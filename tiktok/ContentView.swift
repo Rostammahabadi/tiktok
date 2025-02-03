@@ -16,7 +16,7 @@ struct ContentView: View {
                         Label("Create", systemImage: "video.badge.plus")
                     }
                 
-                TeacherProfileView()
+                TeacherProfileView(isLoggedIn: $isLoggedIn)
                     .tabItem {
                         Label("Profile", systemImage: "person.crop.circle")
                     }

@@ -1,7 +1,9 @@
 import SwiftUI
+import FirebaseAuth
 
 struct TeacherProfileView: View {
     @State private var selectedTab = 0
+    @Binding var isLoggedIn: Bool
     
     let videos = [
         Video(title: "Introduction to Algebra", description: "Learn the basics of algebraic equations", author: "Jane Smith"),
@@ -64,6 +66,23 @@ struct TeacherProfileView: View {
             }
             .background(Theme.backgroundColor)
             .navigationTitle("Profile")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: logout) {
+                        Text("Logout")
+                            .foregroundColor(Theme.accentColor)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func logout() {
+        do {
+            try Auth.auth().signOut()
+            isLoggedIn = false
+        } catch {
+            print("Error signing out: \(error.localizedDescription)")
         }
     }
 }
