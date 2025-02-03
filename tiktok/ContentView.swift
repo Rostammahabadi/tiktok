@@ -1,24 +1,30 @@
-//
-//  ContentView.swift
-//  tiktok
-//
-//  Created by Rostam on 2/3/25.
-//
-
 import SwiftUI
 
 struct ContentView: View {
+    @State private var isLoggedIn = false
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        if isLoggedIn {
+            TabView {
+                VideoFeedView()
+                    .tabItem {
+                        Label("Feed", systemImage: "play.rectangle.fill")
+                    }
+                
+                VideoCreationView()
+                    .tabItem {
+                        Label("Create", systemImage: "video.badge.plus")
+                    }
+                
+                TeacherProfileView()
+                    .tabItem {
+                        Label("Profile", systemImage: "person.crop.circle")
+                    }
+            }
+            .accentColor(Theme.accentColor)
+        } else {
+            WelcomeView(isLoggedIn: $isLoggedIn)
         }
-        .padding()
     }
 }
 
-#Preview {
-    ContentView()
-}

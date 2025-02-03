@@ -6,6 +6,16 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		09ACCA202D513CAE0015C91F /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA1F2D513CAE0015C91F /* FirebaseAnalytics */; };
+		09ACCA222D513CAE0015C91F /* FirebaseAnalyticsOnDeviceConversion in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA212D513CAE0015C91F /* FirebaseAnalyticsOnDeviceConversion */; };
+		09ACCA242D513CAE0015C91F /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA232D513CAE0015C91F /* FirebaseAnalyticsWithoutAdIdSupport */; };
+		09ACCA262D513CAE0015C91F /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA252D513CAE0015C91F /* FirebaseAppCheck */; };
+		09ACCA282D513CAE0015C91F /* FirebaseAppDistribution-Beta in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA272D513CAE0015C91F /* FirebaseAppDistribution-Beta */; };
+		09ACCA392D514C720015C91F /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA382D514C720015C91F /* FirebaseAuth */; };
+		09ACCA3B2D514C760015C91F /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA3A2D514C760015C91F /* FirebaseCore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		09ACCA0B2D51390D0015C91F /* tiktok.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = tiktok.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +33,13 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				09ACCA262D513CAE0015C91F /* FirebaseAppCheck in Frameworks */,
+				09ACCA392D514C720015C91F /* FirebaseAuth in Frameworks */,
+				09ACCA202D513CAE0015C91F /* FirebaseAnalytics in Frameworks */,
+				09ACCA282D513CAE0015C91F /* FirebaseAppDistribution-Beta in Frameworks */,
+				09ACCA3B2D514C760015C91F /* FirebaseCore in Frameworks */,
+				09ACCA242D513CAE0015C91F /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */,
+				09ACCA222D513CAE0015C91F /* FirebaseAnalyticsOnDeviceConversion in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -33,6 +50,7 @@
 			isa = PBXGroup;
 			children = (
 				09ACCA0D2D51390D0015C91F /* tiktok */,
+				09ACCA372D514C720015C91F /* Frameworks */,
 				09ACCA0C2D51390D0015C91F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -43,6 +61,13 @@
 				09ACCA0B2D51390D0015C91F /* tiktok.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		09ACCA372D514C720015C91F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -65,6 +90,13 @@
 			);
 			name = tiktok;
 			packageProductDependencies = (
+				09ACCA1F2D513CAE0015C91F /* FirebaseAnalytics */,
+				09ACCA212D513CAE0015C91F /* FirebaseAnalyticsOnDeviceConversion */,
+				09ACCA232D513CAE0015C91F /* FirebaseAnalyticsWithoutAdIdSupport */,
+				09ACCA252D513CAE0015C91F /* FirebaseAppCheck */,
+				09ACCA272D513CAE0015C91F /* FirebaseAppDistribution-Beta */,
+				09ACCA382D514C720015C91F /* FirebaseAuth */,
+				09ACCA3A2D514C760015C91F /* FirebaseCore */,
 			);
 			productName = tiktok;
 			productReference = 09ACCA0B2D51390D0015C91F /* tiktok.app */;
@@ -94,6 +126,9 @@
 			);
 			mainGroup = 09ACCA022D51390D0015C91F;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 09ACCA0C2D51390D0015C91F /* Products */;
 			projectDirPath = "";
@@ -254,6 +289,8 @@
 				DEVELOPMENT_ASSET_PATHS = "\"tiktok/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = tiktok;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -282,6 +319,8 @@
 				DEVELOPMENT_ASSET_PATHS = "\"tiktok/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = tiktok;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -322,6 +361,55 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.8.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		09ACCA1F2D513CAE0015C91F /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		09ACCA212D513CAE0015C91F /* FirebaseAnalyticsOnDeviceConversion */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsOnDeviceConversion;
+		};
+		09ACCA232D513CAE0015C91F /* FirebaseAnalyticsWithoutAdIdSupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsWithoutAdIdSupport;
+		};
+		09ACCA252D513CAE0015C91F /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
+		};
+		09ACCA272D513CAE0015C91F /* FirebaseAppDistribution-Beta */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseAppDistribution-Beta";
+		};
+		09ACCA382D514C720015C91F /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		09ACCA3A2D514C760015C91F /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 09ACCA032D51390D0015C91F /* Project object */;
 }
