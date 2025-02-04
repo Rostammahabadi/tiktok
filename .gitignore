@@ -22,3 +22,37 @@ DerivedData/
 
 # macOS system files
 .DS_Store
+
+# === Swift Package Manager ===
+# Ignore build artifacts:
+.build/
+
+# Optionally ignore the resolved package file.
+# For apps, you might want to commit this for reproducible builds.
+# Uncomment the line below if you prefer to ignore it.
+# Package.resolved
+
+# === Swift Package Manager (Xcode Integration) ===
+.swiftpm/
+
+# === Xcode ===
+# Xcode workspace and project temporary files:
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Uncomment if you want to ignore Xcode project workspaces:
+# *.xcworkspace
+
+# === macOS ===
+# macOS Finder metadata:
+.DS_Store
+
+# === VSCode ===
+# VSCode settings:
+.vscode/
+
+# === Other Temporary Files ===
+# Logs and temporary files:
+*.log
+*.tmp

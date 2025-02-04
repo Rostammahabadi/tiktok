@@ -50,11 +50,39 @@ struct VideoFeedView: View {
         VerticalPager(pageCount: viewModel.videos.count, currentIndex: $currentIndex) {
             ForEach(viewModel.videos.indices, id: \.self) { index in
                 FullScreenVideoCard(video: viewModel.videos[index])
+                    .onAppear {
+                        prefetchAdjacentVideos(currentIndex: index)
+                    }
             }
         }
         .ignoresSafeArea()
         .task {
             await viewModel.fetchVideos()
+        }
+    }
+    
+    /// Prefetch the next couple of videos so they're ready when the user scrolls.
+    private func prefetchAdjacentVideos(currentIndex: Int) {
+        let adjacentIndices = [currentIndex + 1, currentIndex + 2]
+        
+        Task.detached(priority: .background) {
+            for index in adjacentIndices {
+                guard index < viewModel.videos.count else { continue }
+                
+                let video = viewModel.videos[index]
+                guard let url = URL(string: video.videoURL) else { continue }
+                
+                // Check cache first
+                if VideoCache.shared.getData(for: video.videoURL) == nil {
+                    do {
+                        let playerItem = CachingPlayerItem(url: url)
+                        // Start preloading asset
+                        try await playerItem.asset.load(.isPlayable)
+                    } catch {
+                        print("Error prefetching video at index \(index): \(error.localizedDescription)")
+                    }
+                }
+            }
         }
     }
 }
@@ -211,20 +239,26 @@ struct FullScreenVideoCard: View {
     
     private func setupVideo() {
         guard let url = URL(string: video.videoURL) else { return }
-        let player = AVPlayer(url: url)
-        self.player = player
+        let cacheKey = video.videoURL
         
-        // Loop video
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: player.currentItem,
-            queue: .main
-        ) { _ in
-            player.seek(to: .zero)
-            player.play()
+        // Check cache first
+        if let cachedData = VideoCache.shared.getData(for: cacheKey),
+           let playerItem = CachingPlayerItem(data: cachedData, url: url) {
+            self.player = AVPlayer(playerItem: playerItem)
+        } else {
+            // Create caching player item for uncached video
+            let playerItem = CachingPlayerItem(url: url)
+            self.player = AVPlayer(playerItem: playerItem)
         }
         
-        player.play()
+        // Loop video playback
+        NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime,
+                                               object: player?.currentItem,
+                                               queue: .main) { _ in
+            player?.seek(to: .zero)
+            player?.play()
+        }
+        player?.play()
     }
     
     private func toggleLike() {
