@@ -2,13 +2,22 @@ import SwiftUI
 import AVFoundation
 import PhotosUI
 import AVKit
+import FirebaseStorage
+import UIKit
 
-class CameraManager: ObservableObject {
+class CameraManager: NSObject, ObservableObject {
     @Published var error: Error?
     @Published var session = AVCaptureSession()
+    @Published var isRecording = false
     private var camera: AVCaptureDevice?
     private var cameraInput: AVCaptureDeviceInput?
     private let cameraQueue = DispatchQueue(label: "CameraQueue")
+    private var videoOutput: AVCaptureMovieFileOutput?
+    @Published var recordedVideoURL: URL?
+    
+    override init() {
+        super.init()
+    }
     
     func checkPermissions() {
         Task {
@@ -49,6 +58,29 @@ class CameraManager: ObservableObject {
                 self.cameraInput = cameraInput
             }
             
+            // Add video output with proper settings
+            let videoOutput = AVCaptureMovieFileOutput()
+            
+            // Set video orientation and dimensions
+            if session.canAddOutput(videoOutput) {
+                session.addOutput(videoOutput)
+                
+                // Configure video connection for portrait orientation
+                if let connection = videoOutput.connection(with: .video) {
+                    if connection.isVideoOrientationSupported {
+                        connection.videoOrientation = .portrait
+                    }
+                    if connection.isVideoStabilizationSupported {
+                        connection.preferredVideoStabilizationMode = .auto
+                    }
+                }
+                
+                // Set video dimensions and quality
+                session.sessionPreset = .hd1920x1080 // 1080p
+                
+                self.videoOutput = videoOutput
+            }
+            
             session.commitConfiguration()
             
             // Start running on background thread
@@ -86,6 +118,58 @@ class CameraManager: ObservableObject {
             self.error = error
         }
     }
+    
+    func toggleRecording() {
+        if isRecording {
+            videoOutput?.stopRecording()
+        } else {
+            guard let videoOutput = videoOutput else { return }
+            
+            let outputURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension("mov")
+            
+            // Configure recording settings
+            let videoSettings: [String: Any] = [
+                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoWidthKey: 1080, // Portrait mode: width is smaller
+                AVVideoHeightKey: 1920 // Height is larger for 9:16 aspect ratio
+            ]
+            
+            // Set video connection properties
+            if let connection = videoOutput.connection(with: .video) {
+                if connection.isVideoOrientationSupported {
+                    connection.videoOrientation = .portrait
+                }
+                if connection.isVideoStabilizationSupported {
+                    connection.preferredVideoStabilizationMode = .auto
+                }
+            }
+            
+            videoOutput.startRecording(to: outputURL, recordingDelegate: self)
+        }
+        isRecording.toggle()
+    }
+}
+
+extension CameraManager: AVCaptureFileOutputRecordingDelegate {
+    func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        if let error = error {
+            DispatchQueue.main.async {
+                self.error = error
+            }
+            return
+        }
+        
+        DispatchQueue.main.async {
+            self.recordedVideoURL = outputFileURL
+            self.isRecording = false
+        }
+    }
+    
+    func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
+        // Optional: Handle recording start
+    }
 }
 
 enum CameraError: Error {
@@ -110,11 +194,11 @@ struct CameraPreview: UIViewRepresentable {
         let view = VideoPreviewView()
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
-        @available(iOS, deprecated: 17.0, message: "Using deprecated videoOrientation for compatibility")
-        func setOrientation() {
+        
+        // Ensure preview is in portrait orientation
+        if view.previewLayer.connection?.isVideoOrientationSupported ?? false {
             view.previewLayer.connection?.videoOrientation = .portrait
         }
-        setOrientation()
         return view
     }
     
@@ -125,13 +209,56 @@ struct CameraPreview: UIViewRepresentable {
 
 struct VideoCreationView: View {
     @StateObject private var cameraManager = CameraManager()
-    @State private var isRecording = false
     @State private var showingFilePicker = false
     @State private var videoDescription = ""
     @Environment(\.dismiss) private var dismiss
     @State private var selectedItem: PhotosPickerItem?
     @State private var videoURL: URL?
     @State private var showTrimmer = false
+    @State private var isProcessing = false
+    @State private var processingError: Error?
+    
+    private let videoCompressor = VideoCompressor()
+    
+    @State private var uploadProgress: Double = 0
+    
+    private func processAndUploadVideo(url: URL) async {
+        isProcessing = true
+        
+        do {
+            let compressedURL = try await videoCompressor.compressVideo(inputURL: url)
+            
+            let storageRef = Storage.storage().reference()
+            let videoName = "\(UUID().uuidString).mp4"
+            let videoRef = storageRef.child("videos/\(videoName)")
+            
+            let uploadTask = videoRef.putFile(from: compressedURL, metadata: nil)
+            
+            uploadTask.observe(.progress) { snapshot in
+                let percentComplete = Double(snapshot.progress!.completedUnitCount)
+                    / Double(snapshot.progress!.totalUnitCount)
+                DispatchQueue.main.async {
+                    uploadProgress = percentComplete
+                }
+            }
+            
+            let _ = try await uploadTask.snapshot
+            
+            try? FileManager.default.removeItem(at: compressedURL)
+            try? FileManager.default.removeItem(at: url)
+            
+            await MainActor.run {
+                isProcessing = false
+                dismiss()
+            }
+            
+        } catch {
+            await MainActor.run {
+                isProcessing = false
+                processingError = error
+            }
+        }
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -140,13 +267,10 @@ struct VideoCreationView: View {
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .ignoresSafeArea()
                     .task {
-                        // Start camera when view appears
                         cameraManager.checkPermissions()
                     }
                 
-                // Overlay controls
                 VStack(spacing: 0) {
-                    // Top controls
                     HStack {
                         Button(action: { dismiss() }) {
                             Image(systemName: "xmark")
@@ -181,9 +305,7 @@ struct VideoCreationView: View {
                     
                     Spacer()
                     
-                    // Bottom controls
                     VStack(spacing: 20) {
-                        // Effects scroll
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 15) {
                                 ForEach(["Speed", "Beauty", "Filters", "Timer", "Flash", "More"], id: \.self) { effect in
@@ -200,7 +322,6 @@ struct VideoCreationView: View {
                         }
                         .padding(.vertical, 10)
                         
-                        // Recording controls
                         HStack(spacing: 30) {
                             Button(action: { showingFilePicker = true }) {
                                 Image(systemName: "photo")
@@ -227,15 +348,16 @@ struct VideoCreationView: View {
                                 }
                             }
                             
-                            // Record button
-                            Button(action: { isRecording.toggle() }) {
+                            Button(action: { 
+                                cameraManager.toggleRecording()
+                            }) {
                                 ZStack {
                                     Circle()
                                         .stroke(Color.white, lineWidth: 4)
                                         .frame(width: 75, height: 75)
                                     
                                     Circle()
-                                        .fill(isRecording ? Color.red : Color.white)
+                                        .fill(cameraManager.isRecording ? Color.red : Color.white)
                                         .frame(width: 65, height: 65)
                                 }
                             }
@@ -250,6 +372,19 @@ struct VideoCreationView: View {
                     }
                     .background(Color.black.opacity(0.3))
                 }
+                
+                if isProcessing {
+                    Color.black.opacity(0.7)
+                        .edgesIgnoringSafeArea(.all)
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+                        Text("Processing video... \(Int(uploadProgress * 100))%")
+                            .foregroundColor(.white)
+                            .padding(.top)
+                    }
+                }
             }
         }
         .alert("Camera Error", isPresented: .constant(cameraManager.error != nil)) {
@@ -259,14 +394,22 @@ struct VideoCreationView: View {
         } message: {
             Text(cameraManager.error?.localizedDescription ?? "")
         }
-        .sheet(isPresented: $showTrimmer, onDismiss: {
-            // Reset selection when trimmer is dismissed
-            selectedItem = nil
-            videoURL = nil
-        }) {
-            if let videoURL {
+        .sheet(isPresented: $showTrimmer) {
+            if let videoURL = cameraManager.recordedVideoURL {
                 VideoTrimmerView(url: videoURL)
             }
+        }
+        .onChange(of: cameraManager.recordedVideoURL) { newURL in
+            if newURL != nil {
+                showTrimmer = true
+            }
+        }
+        .alert("Processing Error", isPresented: .constant(processingError != nil)) {
+            Button("OK") {
+                processingError = nil
+            }
+        } message: {
+            Text(processingError?.localizedDescription ?? "")
         }
     }
 }
