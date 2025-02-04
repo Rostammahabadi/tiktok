@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		095108F62D519A0300C224ED /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 095108F52D519A0300C224ED /* FirebaseStorage */; };
+		095108F82D519A1A00C224ED /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 095108F72D519A1A00C224ED /* FirebaseFirestore */; };
 		09ACCA202D513CAE0015C91F /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA1F2D513CAE0015C91F /* FirebaseAnalytics */; };
 		09ACCA222D513CAE0015C91F /* FirebaseAnalyticsOnDeviceConversion in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA212D513CAE0015C91F /* FirebaseAnalyticsOnDeviceConversion */; };
 		09ACCA242D513CAE0015C91F /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA232D513CAE0015C91F /* FirebaseAnalyticsWithoutAdIdSupport */; };
@@ -20,9 +22,22 @@
 		09ACCA0B2D51390D0015C91F /* tiktok.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = tiktok.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		09ACCA5E2D5170330015C91F /* Exceptions for "tiktok" folder in "tiktok" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 09ACCA0A2D51390D0015C91F /* tiktok */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		09ACCA0D2D51390D0015C91F /* tiktok */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				09ACCA5E2D5170330015C91F /* Exceptions for "tiktok" folder in "tiktok" target */,
+			);
 			path = tiktok;
 			sourceTree = "<group>";
 		};
@@ -38,6 +53,8 @@
 				09ACCA202D513CAE0015C91F /* FirebaseAnalytics in Frameworks */,
 				09ACCA282D513CAE0015C91F /* FirebaseAppDistribution-Beta in Frameworks */,
 				09ACCA3B2D514C760015C91F /* FirebaseCore in Frameworks */,
+				095108F82D519A1A00C224ED /* FirebaseFirestore in Frameworks */,
+				095108F62D519A0300C224ED /* FirebaseStorage in Frameworks */,
 				09ACCA242D513CAE0015C91F /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */,
 				09ACCA222D513CAE0015C91F /* FirebaseAnalyticsOnDeviceConversion in Frameworks */,
 			);
@@ -97,6 +114,8 @@
 				09ACCA272D513CAE0015C91F /* FirebaseAppDistribution-Beta */,
 				09ACCA382D514C720015C91F /* FirebaseAuth */,
 				09ACCA3A2D514C760015C91F /* FirebaseCore */,
+				095108F52D519A0300C224ED /* FirebaseStorage */,
+				095108F72D519A1A00C224ED /* FirebaseFirestore */,
 			);
 			productName = tiktok;
 			productReference = 09ACCA0B2D51390D0015C91F /* tiktok.app */;
@@ -284,13 +303,18 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = tiktok/tiktok.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"tiktok/Preview Content\"";
+				DEVELOPMENT_TEAM = V785FYBXRX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = tiktok/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = tiktok;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app requires access to the camera to capture photos for your profile.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app uses the microphone to record videos with audio.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -303,6 +327,10 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = Rostam.tiktok;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -314,13 +342,18 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = tiktok/tiktok.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"tiktok/Preview Content\"";
+				DEVELOPMENT_TEAM = V785FYBXRX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = tiktok/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = tiktok;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app requires access to the camera to capture photos for your profile.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app uses the microphone to record videos with audio.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -333,6 +366,10 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = Rostam.tiktok;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -374,6 +411,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		095108F52D519A0300C224ED /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		095108F72D519A1A00C224ED /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
 		09ACCA1F2D513CAE0015C91F /* FirebaseAnalytics */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

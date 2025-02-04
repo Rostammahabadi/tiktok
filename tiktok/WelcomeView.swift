@@ -121,6 +121,9 @@ struct LoginView: View {
                         .focused($focusedField, equals: .email)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
+                        .onAppear{
+                            focusedField = .email
+                        }
                     
                     CustomSecureField(placeholder: "Password", text: $password)
                         .focused($focusedField, equals: .password)
@@ -176,6 +179,8 @@ struct LoginView: View {
                     .foregroundColor(.white)
                 }
             }
+        }.onAppear{
+            isLoggedIn = true
         }
     }
     
@@ -184,7 +189,6 @@ struct LoginView: View {
     func login() {
         errorMessage = nil
         isLoading = true
-        
         Auth.auth().signIn(withEmail: email, password: password) { result, error in
             isLoading = false
             if let error = error {

@@ -6,9 +6,36 @@ struct TeacherProfileView: View {
     @Binding var isLoggedIn: Bool
     
     let videos = [
-        Video(title: "Introduction to Algebra", description: "Learn the basics of algebraic equations", author: "Jane Smith"),
-        Video(title: "The Solar System", description: "Explore our cosmic neighborhood", author: "Jane Smith"),
-        Video(title: "World War II", description: "A brief overview of WWII", author: "Jane Smith")
+        Video(
+            id: "1",
+            title: "Introduction to Algebra",
+            description: "Learn the basics of algebraic equations",
+            author: "Jane Smith",
+            videoURL: "", // You'll want to replace with actual video URLs
+            likes: 245,
+            views: 1200,
+            timestamp: Date()
+        ),
+        Video(
+            id: "2",
+            title: "The Solar System",
+            description: "Explore our cosmic neighborhood",
+            author: "Jane Smith",
+            videoURL: "",
+            likes: 189,
+            views: 890,
+            timestamp: Date()
+        ),
+        Video(
+            id: "3",
+            title: "World War II",
+            description: "A brief overview of WWII",
+            author: "Jane Smith",
+            videoURL: "",
+            likes: 567,
+            views: 2300,
+            timestamp: Date()
+        )
     ]
     
     var body: some View {
