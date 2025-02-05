@@ -167,7 +167,7 @@ struct FullScreenVideoCard: View {
                 Spacer()
                 
                 HStack {
-                    // Video info
+//                     Video info
                     VStack(alignment: .leading) {
                         Text(video.author)
                             .font(.headline)

@@ -9,11 +9,13 @@
 /* Begin PBXBuildFile section */
 		095108F62D519A0300C224ED /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 095108F52D519A0300C224ED /* FirebaseStorage */; };
 		095108F82D519A1A00C224ED /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 095108F72D519A1A00C224ED /* FirebaseFirestore */; };
+		099493A52D52FCDE00A70D4B /* VideoEditorSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 099493A42D52FCDE00A70D4B /* VideoEditorSDK */; };
 		09ACCA392D514C720015C91F /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA382D514C720015C91F /* FirebaseAuth */; };
 		09ACCA3B2D514C760015C91F /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 09ACCA3A2D514C760015C91F /* FirebaseCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		099493AC2D53079F00A70D4B /* license */ = {isa = PBXFileReference; lastKnownFileType = text; name = license; path = tiktok/license; sourceTree = "<group>"; };
 		09ACCA0B2D51390D0015C91F /* tiktok.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = tiktok.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -47,6 +49,7 @@
 				09ACCA3B2D514C760015C91F /* FirebaseCore in Frameworks */,
 				095108F82D519A1A00C224ED /* FirebaseFirestore in Frameworks */,
 				095108F62D519A0300C224ED /* FirebaseStorage in Frameworks */,
+				099493A52D52FCDE00A70D4B /* VideoEditorSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -56,6 +59,7 @@
 		09ACCA022D51390D0015C91F = {
 			isa = PBXGroup;
 			children = (
+				099493AC2D53079F00A70D4B /* license */,
 				09ACCA0D2D51390D0015C91F /* tiktok */,
 				09ACCA372D514C720015C91F /* Frameworks */,
 				09ACCA0C2D51390D0015C91F /* Products */,
@@ -101,6 +105,7 @@
 				09ACCA3A2D514C760015C91F /* FirebaseCore */,
 				095108F52D519A0300C224ED /* FirebaseStorage */,
 				095108F72D519A1A00C224ED /* FirebaseFirestore */,
+				099493A42D52FCDE00A70D4B /* VideoEditorSDK */,
 			);
 			productName = tiktok;
 			productReference = 09ACCA0B2D51390D0015C91F /* tiktok.app */;
@@ -132,6 +137,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				099493A32D52FCDE00A70D4B /* XCRemoteSwiftPackageReference "vesdk-ios-build" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 09ACCA0C2D51390D0015C91F /* Products */;
@@ -385,6 +391,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		099493A32D52FCDE00A70D4B /* XCRemoteSwiftPackageReference "vesdk-ios-build" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/imgly/vesdk-ios-build";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.10.2;
+			};
+		};
 		09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
@@ -405,6 +419,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 09ACCA1E2D513CAE0015C91F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		099493A42D52FCDE00A70D4B /* VideoEditorSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 099493A32D52FCDE00A70D4B /* XCRemoteSwiftPackageReference "vesdk-ios-build" */;
+			productName = VideoEditorSDK;
 		};
 		09ACCA382D514C720015C91F /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;

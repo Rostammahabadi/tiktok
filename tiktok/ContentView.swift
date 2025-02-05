@@ -21,7 +21,7 @@ struct ContentView: View {
                         Label("Feed", systemImage: "play.rectangle.fill")
                     }
                 
-                VideoCreationView()
+                CreateView()
                     .tabItem {
                         Label("Create", systemImage: "video.badge.plus")
                     }
