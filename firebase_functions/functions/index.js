@@ -13,9 +13,10 @@ const ffmpegPath = require("ffmpeg-static");
 
 exports.convertVideoToHLS = functions
     .runWith({
-      // Increase memory if needed for large files
-      memory: "1GB",
-      timeoutSeconds: 540, // 9 minutes, adjust as needed
+      // Increase memory and CPU allocation for faster processing
+      memory: "2GB",
+      cpu: 2,
+      timeoutSeconds: 540, // Maximum allowed timeout (9 minutes)
     })
     .https.onCall(async (data, context) => {
       // data.filePath is the path in Firebase Storage of the MP4
@@ -33,47 +34,65 @@ exports.convertVideoToHLS = functions
       const hlsOutputFolder = path.join(os.tmpdir(), fileName + "-hls");
 
       try {
+        console.log("Starting HLS conversion for:", filePath);
+
         // 1) Download the MP4 to local temp storage
+        console.log("Downloading source video...");
         await bucket.file(filePath).download({destination: tempLocalFile});
         console.log(`Downloaded video to ${tempLocalFile}`);
 
         // 2) Create a local folder for HLS output
         fs.mkdirSync(hlsOutputFolder, {recursive: true});
 
-        // 3) Spawn ffmpeg to convert MP4 -> HLS
-        //    Example basic command:
-        //    ffmpeg -i input.mp4 -profile:v baseline -level 3.0 -start_number 0 \
-        //           -hls_time 10 -hls_list_size 0 -f hls output.m3u8
+        // 3) Spawn ffmpeg to convert MP4 -> HLS with optimized settings
+        console.log("Starting ffmpeg conversion...");
         await new Promise((resolve, reject) => {
           const args = [
-            "-i",
-            tempLocalFile,
-            "-profile:v",
-            "baseline",
-            "-level",
-            "3.0",
-            "-start_number",
-            "0",
-            "-hls_time",
-            "6", // segment length in seconds
-            "-hls_list_size",
-            "0",
-            "-f",
-            "hls",
+            "-i", tempLocalFile,
+            // Video settings - optimize for speed
+            "-c:v", "h264",
+            "-profile:v", "main",
+            "-preset", "veryfast", // Faster encoding
+            "-crf", "23",
+            "-sc_threshold", "0",
+            "-g", "48",
+            "-keyint_min", "48",
+            // Audio settings - optimize bitrate
+            "-c:a", "aac",
+            "-b:a", "96k", // Reduced audio bitrate
+            "-ac", "2",
+            // HLS settings - optimize segment size
+            "-hls_time", "4", // Longer segments = fewer files
+            "-hls_list_size", "0",
+            "-hls_segment_type", "mpegts",
+            "-hls_segment_filename", path.join(hlsOutputFolder, "segment%03d.ts"),
+            // Use hardware acceleration if available
+            "-threads", "0",
+            "-f", "hls",
             path.join(hlsOutputFolder, "output.m3u8"),
           ];
 
           console.log(`Spawning ffmpeg with args: ${args.join(" ")}`);
           const ffmpeg = spawn(ffmpegPath, args);
 
+          // Log ffmpeg output for debugging
+          ffmpeg.stdout.on("data", (data) => {
+            console.log(`ffmpeg stdout: ${data}`);
+          });
+
+          ffmpeg.stderr.on("data", (data) => {
+            console.log(`ffmpeg stderr: ${data}`);
+          });
+
           ffmpeg.on("close", (code) => {
             if (code === 0) {
               console.log("ffmpeg conversion successful");
               resolve();
             } else {
-              reject(new Error("ffmpeg process exited with code " + code));
+              reject(new Error(`ffmpeg process exited with code ${code}`));
             }
           });
+
           ffmpeg.on("error", (err) => reject(err));
         });
 
@@ -81,37 +100,73 @@ exports.convertVideoToHLS = functions
         //    We'll place them in a folder like `videos/hls/<fileName>/*`
         const hlsStoragePath = `videos/hls/${fileName}`;
         const files = fs.readdirSync(hlsOutputFolder);
-        for (const hlsFile of files) {
+
+        // Upload files with public read access
+        const uploadPromises = files.map(async (hlsFile) => {
           const localPath = path.join(hlsOutputFolder, hlsFile);
           const remotePath = path.join(hlsStoragePath, hlsFile);
-          await bucket.upload(localPath, {destination: remotePath});
-        }
-        console.log("HLS segments uploaded to:", hlsStoragePath);
-
-        // 5) Optionally, generate a **public** or **signed** URL for the .m3u8
-        //    We'll rely on `videos/hls/<fileName>/output.m3u8`.
-        const manifestFile = bucket.file(`${hlsStoragePath}/output.m3u8`);
-
-        //  a) Make the file publicly readable (requires uniform bucket-level access
-        //      or appropriate IAM policy).
-        //      await manifestFile.makePublic();
-        //      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${hlsStoragePath}/output.m3u8`;
-        //      return { hlsURL: publicUrl };
-
-        //   b) Or generate a signed URL (valid for e.g. 24 hours)
-        const [url] = await manifestFile.getSignedUrl({
-          action: "read",
-          expires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+          await bucket.upload(localPath, {
+            destination: remotePath,
+            metadata: {
+              cacheControl: "public, max-age=31536000",
+            },
+          });
         });
 
-        console.log("Returning HLS URL:", url);
+        await Promise.all(uploadPromises);
+        console.log("HLS segments uploaded to:", hlsStoragePath);
+
+        // Generate signed URLs for all segments
+        const signedUrls = await Promise.all(
+            files.map(async (hlsFile) => {
+              const file = bucket.file(path.join(hlsStoragePath, hlsFile));
+              const [url] = await file.getSignedUrl({
+                action: "read",
+                expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+              });
+              return {file: hlsFile, url};
+            }),
+        );
+
+        // Read and modify the m3u8 file to use signed URLs
+        const m3u8Path = path.join(hlsOutputFolder, "output.m3u8");
+        let m3u8Content = fs.readFileSync(m3u8Path, "utf8");
+
+        // Replace each .ts reference with its signed URL
+        signedUrls.forEach(({file, url}) => {
+          if (file.endsWith(".ts")) {
+            m3u8Content = m3u8Content.replace(file, url);
+          }
+        });
+
+        // Write modified m3u8 back to disk
+        fs.writeFileSync(m3u8Path, m3u8Content);
+
+        // Upload modified m3u8
+        await bucket.upload(m3u8Path, {
+          destination: `${hlsStoragePath}/output.m3u8`,
+          metadata: {
+            cacheControl: "private, max-age=3600",
+            contentType: "application/x-mpegURL",
+          },
+        });
+
+        // Get signed URL for the manifest
+        const manifestFile = bucket.file(`${hlsStoragePath}/output.m3u8`);
+        const [manifestUrl] = await manifestFile.getSignedUrl({
+          action: "read",
+          expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+
+        console.log("Returning HLS URL:", manifestUrl);
 
         // 6) Cleanup local temp files to avoid filling up the ephemeral storage
         fs.unlinkSync(tempLocalFile);
         fs.rmSync(hlsOutputFolder, {recursive: true, force: true});
-        // Return the .m3u8 link
+
+        // Return the signed manifest URL
         return {
-          hlsURL: url,
+          hlsURL: manifestUrl,
           hlsPath: hlsStoragePath,
         };
       } catch (err) {
