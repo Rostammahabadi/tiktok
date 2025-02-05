@@ -19,10 +19,12 @@ struct VideoStudioView: View {
                 let video = ImglyKit.Video(url: videoURL)
                 VideoEditor(video: video)
                     .onDidSave { result in
+                        print("runing the result from onDidSave")
                         print("Received video at \(result.output.url.absoluteString)")
                         dismiss()
                     }
                     .onDidCancel {
+                        print("cancelling")
                         dismiss()
                     }
                     .onDidFail { error in

@@ -10,6 +10,7 @@ struct VerticalPager<Content: View>: View {
         self.pageCount = pageCount
         self._currentIndex = currentIndex
         self.content = content()
+        print("🔄 VerticalPager initialized with \(pageCount) pages")
     }
     
     @GestureState private var translation: CGFloat = 0
@@ -33,6 +34,7 @@ struct VerticalPager<Content: View>: View {
                     if abs(offset) > 20 {
                         let newIndex = currentIndex + min(max(offset, -1), 1)
                         if newIndex >= 0 && newIndex < pageCount {
+                            print("📱 Switching to video index: \(newIndex)")
                             self.currentIndex = newIndex
                         }
                     }
@@ -47,16 +49,33 @@ struct VideoFeedView: View {
     @State private var currentIndex = 0
     
     var body: some View {
-        VerticalPager(pageCount: viewModel.videos.count, currentIndex: $currentIndex) {
-            ForEach(viewModel.videos.indices, id: \.self) { index in
-                FullScreenVideoCard(video: viewModel.videos[index])
-                    .onAppear {
-                        prefetchAdjacentVideos(currentIndex: index)
+        Group {
+            if viewModel.isLoading {
+                ProgressView("Loading videos...")
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .foregroundColor(.white)
+            } else if viewModel.videos.isEmpty {
+                VStack {
+                    Text("No videos available")
+                        .foregroundColor(.white)
+                    Button("Retry") {
+                        print("🔄 Retrying video fetch...")
+                        Task {
+                            await viewModel.fetchVideos()
+                        }
                     }
+                }
+            } else {
+                VerticalPager(pageCount: viewModel.videos.count, currentIndex: $currentIndex) {
+                    ForEach(viewModel.videos.indices, id: \.self) { index in
+                        VideoPlayerView(video: viewModel.videos[index])
+                    }
+                }
             }
         }
         .ignoresSafeArea()
         .task {
+            print("📱 VideoFeedView appeared, fetching videos...")
             await viewModel.fetchVideos()
         }
     }
@@ -83,6 +102,81 @@ struct VideoFeedView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+struct VideoPlayerView: View {
+    let video: Video
+    @State private var player: AVPlayer?
+    @State private var playerError: Error?
+    
+    var body: some View {
+        ZStack {
+            if let player = player {
+                VideoPlayer(player: player)
+                    .onAppear {
+                        print("▶️ Starting playback for video: \(video.videoURL)")
+                        player.play()
+                    }
+                    .onDisappear {
+                        print("⏸ Pausing playback for video: \(video.videoURL)")
+                        player.pause()
+                    }
+            } else if playerError != nil {
+                VStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                    Text("Error loading video")
+                        .padding()
+                }
+                .foregroundColor(.white)
+            } else {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            }
+            
+            VStack {
+                Spacer()
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(video.author)
+                            .font(.headline)
+                        Text(video.title)
+                            .font(.subheadline)
+                    }
+                    Spacer()
+                }
+                .padding()
+                .foregroundColor(.white)
+            }
+        }
+        .onAppear {
+            print("🎥 Setting up player for URL: \(video.videoURL)")
+            if let url = URL(string: video.videoURL) {
+                print("✅ Valid URL created")
+                let newPlayer = AVPlayer(url: url)
+                newPlayer.automaticallyWaitsToMinimizeStalling = false
+                
+                // Add observer for player errors
+                NotificationCenter.default.addObserver(forName: .AVPlayerItemFailedToPlayToEndTime, object: newPlayer.currentItem, queue: .main) { notification in
+                    if let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
+                        print("❌ Player error: \(error.localizedDescription)")
+                        self.playerError = error
+                    }
+                }
+                
+                self.player = newPlayer
+            } else {
+                print("❌ Invalid URL: \(video.videoURL)")
+                self.playerError = NSError(domain: "VideoPlayerView", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
+            }
+        }
+        .onDisappear {
+            print("🔄 Cleaning up player for video: \(video.videoURL)")
+            player?.pause()
+            player = nil
+            NotificationCenter.default.removeObserver(self)
         }
     }
 }
@@ -145,133 +239,6 @@ struct FloatingHearts: ViewModifier {
     }
 }
 
-struct FullScreenVideoCard: View {
-    let video: Video
-    @State private var isLiked = false
-    @State private var showLikeAnimation = false
-    @State private var tapLocation: CGPoint = .zero
-    @State private var player: AVPlayer?
-    
-    var body: some View {
-        ZStack {
-            // Video player
-            if let player = player {
-                VideoPlayer(player: player)
-                    .edgesIgnoringSafeArea(.all)
-            } else {
-                Color.black // Loading placeholder
-            }
-            
-            // Overlay content
-            VStack {
-                Spacer()
-                
-                HStack {
-//                     Video info
-                    VStack(alignment: .leading) {
-                        Text(video.author)
-                            .font(.headline)
-                        Text(video.title)
-                            .font(.subheadline)
-                        Text(video.description)
-                            .font(.caption)
-                    }
-                    .foregroundColor(.white)
-                    .padding()
-                    
-                    Spacer()
-                    
-                    // Action buttons
-                    VStack(spacing: 20) {
-                        // Like button
-                        Button(action: { toggleLike() }) {
-                            VStack {
-                                Image(systemName: isLiked ? "heart.fill" : "heart")
-                                    .font(.system(size: 30))
-                                    .foregroundColor(isLiked ? .red : .white)
-                                Text("24.5K")
-                                    .font(.caption)
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        
-                        // Comment button
-                        Button(action: {}) {
-                            VStack {
-                                Image(systemName: "bubble.right")
-                                    .font(.system(size: 30))
-                                    .foregroundColor(.white)
-                                Text("1.2K")
-                                    .font(.caption)
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        
-                        // Share button
-                        Button(action: {}) {
-                            VStack {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 30))
-                                    .foregroundColor(.white)
-                                Text("Share")
-                                    .font(.caption)
-                                    .foregroundColor(.white)
-                            }
-                        }
-                    }
-                    .padding(.trailing)
-                }
-                .padding(.bottom, 50)
-            }
-            .padding(.bottom, 30)
-            
-            // Like animation
-            HeartAnimation(position: tapLocation, isAnimating: $showLikeAnimation)
-        }
-        .onAppear {
-            setupVideo()
-        }
-        .onDisappear {
-            player?.pause()
-            player = nil
-        }
-    }
-    
-    private func setupVideo() {
-        guard let url = URL(string: video.videoURL) else { return }
-        let cacheKey = video.videoURL
-        
-        // Check cache first
-        if let cachedData = VideoCache.shared.getData(for: cacheKey),
-           let playerItem = CachingPlayerItem(data: cachedData, url: url) {
-            self.player = AVPlayer(playerItem: playerItem)
-        } else {
-            // Create caching player item for uncached video
-            let playerItem = CachingPlayerItem(url: url)
-            self.player = AVPlayer(playerItem: playerItem)
-        }
-        
-        // Loop video playback
-        NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime,
-                                               object: player?.currentItem,
-                                               queue: .main) { _ in
-            player?.seek(to: .zero)
-            player?.play()
-        }
-        player?.play()
-    }
-    
-    private func toggleLike() {
-        if !isLiked {
-            isLiked = true
-            showLikeAnimation = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                showLikeAnimation = false
-            }
-        }
-    }
-}
-
 extension View {
     func onTapGesture(count: Int, perform action: @escaping (CGPoint) -> Void) -> some View {
         self.simultaneousGesture(
@@ -282,4 +249,3 @@ extension View {
         )
     }
 }
-

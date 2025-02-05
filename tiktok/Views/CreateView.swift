@@ -39,7 +39,7 @@ struct CreateView: View {
                     if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                        let rootViewController = windowScene.windows.first?.rootViewController {
                         editor.presentingViewController = rootViewController
-                        editor.invokeExample()
+                        editor.showVideoEditor()
                     }
                 }) {
                     VStack(spacing: 15) {
