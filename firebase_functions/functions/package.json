@@ -16,7 +16,7 @@
   "dependencies": {
     "ffmpeg-static": "^5.2.0",
     "firebase-admin": "^12.1.0",
-    "firebase-functions": "^5.0.0"
+    "firebase-functions": "^6.3.1"
   },
   "devDependencies": {
     "eslint": "^8.15.0",

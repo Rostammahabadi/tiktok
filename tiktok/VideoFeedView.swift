@@ -344,6 +344,7 @@ class VideoFeedViewModel: ObservableObject {
                         originalUrl = URL(string: originalUrlString)
                         print("🎯 Original URL available: \(originalUrlString)")
                     }
+
                     
                     // Return nil if neither URL is available
                     guard hlsUrl != nil || originalUrl != nil else {

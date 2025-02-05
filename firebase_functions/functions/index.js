@@ -1,4 +1,4 @@
-const functions = require("firebase-functions");
+const {onRequest} = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 admin.initializeApp();
 
@@ -6,34 +6,32 @@ const {spawn} = require("child_process");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
-
-// If using ffmpeg-static, install it via "npm install ffmpeg-static" and require:
 const ffmpegPath = require("ffmpeg-static");
-// Alternatively, if you have a custom approach, set ffmpegPath to your own binary.
 
-exports.convertVideoToHLS = functions
-    .runWith({
-      // Increase memory and CPU allocation for faster processing
-      memory: "2GB",
+exports.convertVideoToHLS = onRequest(
+    {
+      memory: "2GiB",
       cpu: 2,
-      timeoutSeconds: 540, // Maximum allowed timeout (9 minutes)
-    })
-    .https.onCall(async (data, context) => {
-      // data.filePath is the path in Firebase Storage of the MP4
-      const filePath = data.filePath;
-      if (!filePath) {
-        throw new functions.https.HttpsError(
-            "invalid-argument",
-            "The function must be called with 'filePath'.",
-        );
-      }
-
-      const bucket = admin.storage().bucket();
-      const fileName = path.basename(filePath, ".mp4");
-      const tempLocalFile = path.join(os.tmpdir(), fileName + ".mp4");
-      const hlsOutputFolder = path.join(os.tmpdir(), fileName + "-hls");
-
+      timeoutSeconds: 540,
+    },
+    async (req, res) => {
+      console.log("🔥 Request received:", req.body);
       try {
+        if (req.method !== "POST") {
+          return res.status(405).json({error: "Method Not Allowed"});
+        }
+
+        const filePath = req.body.filePath;
+        if (!filePath) {
+          return res.status(400).json({error: "Missing 'filePath' parameter in request body"});
+        }
+
+        console.log("Starting HLS conversion for:", filePath);
+
+        const bucket = admin.storage().bucket();
+        const fileName = path.basename(filePath, ".mp4");
+        const tempLocalFile = path.join(os.tmpdir(), fileName + ".mp4");
+        const hlsOutputFolder = path.join(os.tmpdir(), fileName + "-hls");
         console.log("Starting HLS conversion for:", filePath);
 
         // 1) Download the MP4 to local temp storage
@@ -163,18 +161,9 @@ exports.convertVideoToHLS = functions
         // 6) Cleanup local temp files to avoid filling up the ephemeral storage
         fs.unlinkSync(tempLocalFile);
         fs.rmSync(hlsOutputFolder, {recursive: true, force: true});
-
-        // Return the signed manifest URL
-        return {
-          hlsURL: manifestUrl,
-          hlsPath: hlsStoragePath,
-        };
+        res.status(200).json({hlsURL: manifestUrl, hlsPath: hlsStoragePath});
       } catch (err) {
         console.error("Error in convertVideoToHLS:", err);
-        throw new functions.https.HttpsError(
-            "internal",
-            "Failed to convert to HLS",
-            err.message,
-        );
+        res.status(500).json({error: "Failed to convert to HLS", details: err.message});
       }
     });

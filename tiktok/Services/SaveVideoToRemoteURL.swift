@@ -3,6 +3,7 @@ import VideoEditorSDK
 import FirebaseStorage
 import FirebaseFirestore
 import FirebaseFunctions
+import FirebaseCore
 
 class SaveVideoToRemoteURL: NSObject {
     weak var presentingViewController: UIViewController?
@@ -15,9 +16,6 @@ class SaveVideoToRemoteURL: NSObject {
         let videoRef = storage.reference().child(originalPath)
         
         print("📤 Starting upload for video: \(videoId)")
-        
-        // Create a strong reference to self for the upload chain
-        let strongSelf = self
         
         videoRef.putFile(from: url, metadata: nil) { metadata, error in
             if let error = error {
@@ -46,16 +44,14 @@ class SaveVideoToRemoteURL: NSObject {
                 ]
                 
                 print("💾 Saving to Firestore...")
-                // Use strongSelf here to ensure we maintain the reference
-                strongSelf.db.collection("videos").document(videoId).setData(videoData) { error in
+                self.db.collection("videos").document(videoId).setData(videoData) { error in
                     if let error = error {
-                        print("❌ Firestore write error: \(error.localizedDescription)")
+                        print("❌ Firestore error: \(error.localizedDescription)")
                         return
                     }
                     
-                    print("✅ Video saved to Firestore successfully")
-                    // Start HLS conversion
-                    strongSelf.convertToHLS(filePath: originalPath, videoId: videoId)
+                    print("✅ Saved video metadata to Firestore")
+                    self.convertToHLS(filePath: originalPath, videoId: videoId)
                 }
             }
         }
@@ -64,115 +60,107 @@ class SaveVideoToRemoteURL: NSObject {
     func convertToHLS(filePath: String, videoId: String) {
         print("🎬 Starting HLS conversion for video: \(videoId)")
         
-        // Create strong reference to self at the beginning
-        let strongSelf = self
-        let functions = Functions.functions()
-        let payload: [String: Any] = ["filePath": filePath]
-        
-        print("☁️ Calling Cloud Function with payload: \(payload)")
-        
-        functions.httpsCallable("convertVideoToHLS").call(payload) { result, error in
-            print("⬇️ Received response from Cloud Function")
+        // First get the document from Firestore
+        db.collection("videos").document(videoId).getDocument { (document, error) in
+            if let error = error {
+                print("❌ Firestore error: \(error.localizedDescription)")
+                return
+            }
             
-            if let error = error as NSError? {
-                print("❌ HLS Conversion Error: \(error.localizedDescription)")
-                print("❌ Error domain: \(error.domain)")
-                print("❌ Error code: \(error.code)")
-                if let details = error.userInfo[FunctionsErrorDetailsKey] as? [String: Any] {
-                    print("❌ Error details: \(details)")
+            guard let document = document, document.exists, let originalPath = document.get("originalPath") as? String else {
+                print("❌ Document doesn't exist or missing originalPath")
+                return
+            }
+            
+            guard let projectID = FirebaseApp.app()?.options.projectID else {
+                print("❌ Could not get Firebase project ID")
+                return
+            }
+            
+            let functionRegion = "us-central1"
+            let functionURL = "https://\(functionRegion)-\(projectID).cloudfunctions.net/convertVideoToHLS"
+            
+            guard let url = URL(string: functionURL) else {
+                print("❌ Invalid function URL")
+                return
+            }
+            
+            print("🌐 Function URL: \(functionURL)")
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            let requestBody: [String: Any] = ["filePath": originalPath]
+            
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: requestBody, options: .prettyPrinted)
+                let jsonString = String(data: jsonData, encoding: .utf8) ?? "Invalid JSON"
+                print("📦 Sending JSON: \(jsonString)")  // ✅ Debug log to verify request structure
+                request.httpBody = jsonData
+            } catch {
+                print("❌ Failed to serialize request body: \(error.localizedDescription)")
+                return
+            }
+            
+            let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
+                if let error = error {
+                    print("❌ Network error: \(error.localizedDescription)")
+                    return
                 }
-                strongSelf.updateVideoStatus(videoId: videoId, status: "failed", error: error.localizedDescription)
-                return
-            }
-            
-            // Log the raw result data
-            print("📦 Raw result data: \(String(describing: result?.data))")
-            
-            guard let resultData = result?.data else {
-                print("❌ No data received from Cloud Function")
-                strongSelf.updateVideoStatus(videoId: videoId, status: "failed", error: "No data received from Cloud Function")
-                return
-            }
-            
-            // Print the type of resultData to help debug
-            print("📝 Result data type: \(type(of: resultData))")
-            
-            guard let data = resultData as? [String: Any] else {
-                print("❌ Could not cast result data to [String: Any]")
-                print("❌ Actual data received: \(resultData)")
-                strongSelf.updateVideoStatus(videoId: videoId, status: "failed", error: "Invalid response format")
-                return
-            }
-            
-            // Print all keys in the data dictionary
-            print("🔑 Available keys in response: \(data.keys.joined(separator: ", "))")
-            
-            guard let hlsPath = data["hlsPath"] as? String else {
-                print("❌ Missing hlsPath in response")
-                print("❌ Available data: \(data)")
-                strongSelf.updateVideoStatus(videoId: videoId, status: "failed", error: "Missing hlsPath")
-                return
-            }
-            
-            guard let hlsURL = data["hlsURL"] as? String else {
-                print("❌ Missing hlsURL in response")
-                print("❌ Available data: \(data)")
-                strongSelf.updateVideoStatus(videoId: videoId, status: "failed", error: "Missing hlsURL")
-                return
-            }
-            
-            print("✅ Successfully parsed Cloud Function response")
-            print("📍 HLS Path: \(hlsPath)")
-            print("🔗 HLS URL: \(hlsURL)")
-            
-            let updateData: [String: Any] = [
-                "status": "completed",
-                "hlsPath": "\(hlsPath)/output.m3u8",
-                "hlsUrl": hlsURL,
-                "type": "hls"
-            ]
-            
-            print("📝 Attempting to update Firestore with data: \(updateData)")
-            
-            // Update Firestore document with HLS information
-            let docRef = strongSelf.db.collection("videos").document(videoId)
-            docRef.updateData(updateData) { updateError in
-                if let updateError = updateError {
-                    print("❌ Failed to update video with HLS info: \(updateError.localizedDescription)")
-                    print("❌ Error domain: \(updateError._domain)")
-                    print("❌ Error code: \(updateError._code)")
-                    strongSelf.updateVideoStatus(videoId: videoId, status: "failed", error: "Failed to save HLS information")
-                } else {
-                    print("✅ Updated video with HLS information")
-                    // Verify the update
-                    docRef.getDocument { document, verifyError in
-                        if let verifyError = verifyError {
-                            print("❌ Failed to verify update: \(verifyError.localizedDescription)")
-                        } else if let document = document, document.exists {
-                            print("✅ Verified HLS update in Firestore")
-                            print("📄 Updated document data: \(document.data() ?? [:])")
-                            print("🎉 Video processing completed successfully")
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ Invalid response type")
+                    return
+                }
+                
+                print("📡 Response status code: \(httpResponse.statusCode)")
+                
+                guard let data = data else {
+                    print("❌ No data received")
+                    return
+                }
+                
+                do {
+                    if let responseJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        print("📦 Response data: \(responseJSON)")
+                        
+                        if httpResponse.statusCode == 200 {
+                            if let hlsPath = responseJSON["hlsPath"] as? String,
+                               let hlsURL = responseJSON["hlsURL"] as? String {
+                                print("✅ HLS conversion successful")
+                                
+                                let updateData: [String: Any] = [
+                                    "status": "completed",
+                                    "hlsPath": "\(hlsPath)/output.m3u8",
+                                    "hlsUrl": hlsURL,
+                                    "type": "hls"
+                                ]
+                                
+                                self.db.collection("videos").document(videoId).updateData(updateData) { error in
+                                    if let error = error {
+                                        print("❌ Failed to update video with HLS info: \(error.localizedDescription)")
+                                    } else {
+                                        print("✅ Updated video with HLS information")
+                                    }
+                                }
+                            } else {
+                                print("❌ Missing HLS information in response")
+                            }
                         } else {
-                            print("❌ Document not found after update")
+                            let errorMessage = (responseJSON["error"] as? String) ?? "Unknown error"
+                            print("❌ Function error: \(errorMessage)")
                         }
+                    }
+                } catch {
+                    print("❌ Failed to parse response: \(error.localizedDescription)")
+                    if let responseString = String(data: data, encoding: .utf8) {
+                        print("📝 Raw response: \(responseString)")
                     }
                 }
             }
-        }
-    }
-    
-    private func updateVideoStatus(videoId: String, status: String, error: String?) {
-        var updateData: [String: Any] = ["status": status]
-        if let error = error {
-            updateData["error"] = error
-        }
-        
-        db.collection("videos").document(videoId).updateData(updateData) { error in
-            if let error = error {
-                print("❌ Status update error: \(error.localizedDescription)")
-            } else {
-                print("✅ Status updated to: \(status)")
-            }
+            
+            task.resume()  // ✅ Ensuring network request runs
         }
     }
 }
