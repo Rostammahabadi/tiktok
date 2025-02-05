@@ -1,47 +1,35 @@
 import SwiftUI
 import VideoEditorSDK
+import AVKit
+import FirebaseStorage
 import Photos
 import AVFoundation
 import UIKit
-import FirebaseStorage
 import FirebaseFirestore
 import FirebaseFunctions
 
 class ShowVideoEditor: NSObject {
     weak var presentingViewController: UIViewController?
+    // Keep a strong reference to saveVideoService
     private let saveVideoService = SaveVideoToRemoteURL()
-    
+
     func showVideoEditor() {
+        // Set the presentingViewController before showing the editor
+        saveVideoService.presentingViewController = self.presentingViewController
+        
         guard let url = Bundle.main.url(forResource: "Skater", withExtension: "mp4") else { return }
         let video = VideoEditorSDK.Video(url: url)
         var videoEditor = VideoEditorSwiftUIView(video: video)
-        
-        // Configure video export settings
-        let configuration = Configuration { builder in
-            builder.configureVideoEditViewController { options in
-                // Use MP4 container for maximum compatibility
-                options.videoContainerFormat = .mp4
-                
-                // Use H.264 with high profile and auto level for best quality/compatibility balance
-                // Using a higher bitrate (8000 kbps) for better quality
-                options.videoCodec = .h264(withBitRate: 8000, profile: .HighAutoLevel)
-                
-                // Force export to ensure consistent output
-                options.forceExport = true
-            }
-        }
-        
+
         videoEditor.dismissAction = {
             self.presentingViewController?.dismiss(animated: true, completion: nil)
         }
-        
+
         videoEditor.saveVideoAction = { result in
-            // Set the presentingViewController before upload
-            self.saveVideoService.presentingViewController = self.presentingViewController
+            // No need to use optional chaining since saveVideoService is now a strong reference
             self.saveVideoService.uploadVideo(from: result.output.url, result: result)
         }
-        
-        // Create editor with configuration
+
         let hostingController = UIHostingController(rootView: videoEditor)
         hostingController.modalPresentationStyle = .fullScreen
         presentingViewController?.present(hostingController, animated: true, completion: nil)

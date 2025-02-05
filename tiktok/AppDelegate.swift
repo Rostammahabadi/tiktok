@@ -13,12 +13,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // Initialize img.ly Video Editor SDK with license file
         if let licenseURL = Bundle.main.url(forResource: "license", withExtension: "") {
-            do {
-                try VESDK.unlockWithLicense(at: licenseURL)
-            } catch {
-                print("Failed to unlock VESDK: \(error.localizedDescription)")
-                // The editor will still work but with a watermark
-            }
+            VESDK.unlockWithLicense(at: licenseURL)
         } else {
             print("License file not found. The editor will work with a watermark.")
         }

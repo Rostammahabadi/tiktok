@@ -1,5 +1,7 @@
 import SwiftUI
 import AVKit
+import FirebaseFirestore
+import FirebaseStorage
 
 struct VerticalPager<Content: View>: View {
     let pageCount: Int
@@ -45,140 +47,226 @@ struct VerticalPager<Content: View>: View {
 }
 
 struct VideoFeedView: View {
-    @StateObject private var viewModel = VideoViewModel()
-    @State private var currentIndex = 0
+    @StateObject private var viewModel = VideoFeedViewModel()
     
     var body: some View {
-        Group {
-            if viewModel.isLoading {
-                ProgressView("Loading videos...")
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .foregroundColor(.white)
-            } else if viewModel.videos.isEmpty {
-                VStack {
-                    Text("No videos available")
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                if viewModel.videos.isEmpty {
+                    Text("Loading videos...")
                         .foregroundColor(.white)
-                    Button("Retry") {
-                        print("🔄 Retrying video fetch...")
-                        Task {
-                            await viewModel.fetchVideos()
+                        .frame(height: UIScreen.main.bounds.height)
+                } else {
+                    ForEach(viewModel.videos) { video in
+                        if video.status == "completed" {
+                            VideoPlayerView(url: video.hlsURL)
+                                .frame(height: UIScreen.main.bounds.height)
+                        } else if video.status == "processing" {
+                            ProcessingView()
+                                .frame(height: UIScreen.main.bounds.height)
+                        } else if video.status == "failed" {
+                            FailedVideoView(error: video.error ?? "Unknown error")
+                                .frame(height: UIScreen.main.bounds.height)
                         }
-                    }
-                }
-            } else {
-                VerticalPager(pageCount: viewModel.videos.count, currentIndex: $currentIndex) {
-                    ForEach(viewModel.videos.indices, id: \.self) { index in
-                        VideoPlayerView(video: viewModel.videos[index])
                     }
                 }
             }
         }
-        .ignoresSafeArea()
-        .task {
+        .background(Color.black)
+        .onAppear {
             print("📱 VideoFeedView appeared, fetching videos...")
-            await viewModel.fetchVideos()
+            viewModel.fetchVideos()
+        }
+    }
+}
+
+struct ProcessingView: View {
+    var body: some View {
+        VStack {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            Text("Processing video...")
+                .foregroundColor(.white)
+                .padding(.top)
+        }
+    }
+}
+
+struct FailedVideoView: View {
+    let error: String
+    
+    var body: some View {
+        VStack {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundColor(.white)
+            Text("Failed to process video")
+                .foregroundColor(.white)
+            Text(error)
+                .font(.caption)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding()
+        }
+    }
+}
+
+struct VideoPlayerView: View {
+    let url: URL
+    @State private var player: AVPlayer?
+    @State private var isLoading = true
+    @State private var error: Error?
+    
+    var body: some View {
+        ZStack {
+            if let error = error {
+                VStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                    Text("Error: \(error.localizedDescription)")
+                }
+                .foregroundColor(.white)
+            } else if isLoading {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            } else {
+                VideoPlayer(player: player)
+                    .onDisappear {
+                        player?.pause()
+                        player = nil
+                    }
+            }
+        }
+        .onAppear {
+            setupPlayer()
         }
     }
     
-    /// Prefetch the next couple of videos so they're ready when the user scrolls.
-    private func prefetchAdjacentVideos(currentIndex: Int) {
-        let adjacentIndices = [currentIndex + 1, currentIndex + 2]
+    private func setupPlayer() {
+        print("🎬 Setting up player for URL: \(url)")
         
-        Task.detached(priority: .background) {
-            for index in adjacentIndices {
-                guard index < viewModel.videos.count else { continue }
-                
-                let video = viewModel.videos[index]
-                guard let url = URL(string: video.videoURL) else { continue }
-                
-                // Check cache first
-                if VideoCache.shared.getData(for: video.videoURL) == nil {
-                    do {
-                        let playerItem = CachingPlayerItem(url: url)
-                        // Start preloading asset
-                        try await playerItem.asset.load(.isPlayable)
-                    } catch {
-                        print("Error prefetching video at index \(index): \(error.localizedDescription)")
+        // Create an AVPlayerItem with specific options for HLS
+        let asset = AVURLAsset(url: url)
+        let playerItem = AVPlayerItem(asset: asset)
+        
+        // Set up player
+        let player = AVPlayer(playerItem: playerItem)
+        player.automaticallyWaitsToMinimizeStalling = false
+        
+        // Add observer for player status
+        NotificationCenter.default.addObserver(forName: .AVPlayerItemFailedToPlayToEndTime, object: playerItem, queue: .main) { notification in
+            if let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
+                print("❌ Player error: \(error.localizedDescription)")
+                self.error = error
+            }
+        }
+        
+        // Monitor player item status
+        Task {
+            do {
+                try await playerItem.asset.load(.isPlayable)
+                if playerItem.asset.isPlayable {
+                    await MainActor.run {
+                        self.player = player
+                        self.isLoading = false
+                        player.play()
                     }
+                } else {
+                    throw NSError(domain: "VideoPlayer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Video is not playable"])
+                }
+            } catch {
+                print("❌ Error loading video asset: \(error.localizedDescription)")
+                await MainActor.run {
+                    self.error = error
+                    self.isLoading = false
                 }
             }
         }
     }
 }
 
-struct VideoPlayerView: View {
-    let video: Video
-    @State private var player: AVPlayer?
-    @State private var playerError: Error?
+class VideoFeedViewModel: ObservableObject {
+    @Published var videos: [VideoModel] = []
+    private let db = Firestore.firestore()
+    private let storage = Storage.storage()
     
-    var body: some View {
-        ZStack {
-            if let player = player {
-                VideoPlayer(player: player)
-                    .onAppear {
-                        print("▶️ Starting playback for video: \(video.videoURL)")
-                        player.play()
-                    }
-                    .onDisappear {
-                        print("⏸ Pausing playback for video: \(video.videoURL)")
-                        player.pause()
-                    }
-            } else if playerError != nil {
-                VStack {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                    Text("Error loading video")
-                        .padding()
-                }
-                .foregroundColor(.white)
-            } else {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-            }
-            
-            VStack {
-                Spacer()
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(video.author)
-                            .font(.headline)
-                        Text(video.title)
-                            .font(.subheadline)
-                    }
-                    Spacer()
-                }
-                .padding()
-                .foregroundColor(.white)
-            }
-        }
-        .onAppear {
-            print("🎥 Setting up player for URL: \(video.videoURL)")
-            if let url = URL(string: video.videoURL) {
-                print("✅ Valid URL created")
-                let newPlayer = AVPlayer(url: url)
-                newPlayer.automaticallyWaitsToMinimizeStalling = false
-                
-                // Add observer for player errors
-                NotificationCenter.default.addObserver(forName: .AVPlayerItemFailedToPlayToEndTime, object: newPlayer.currentItem, queue: .main) { notification in
-                    if let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
-                        print("❌ Player error: \(error.localizedDescription)")
-                        self.playerError = error
-                    }
+    func fetchVideos() {
+        print("🔍 Starting to fetch videos...")
+        
+        // Listen for all video documents
+        db.collection("videos")
+            .order(by: "createdAt", descending: true)
+            .addSnapshotListener { [weak self] snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching videos: \(error.localizedDescription)")
+                    return
                 }
                 
-                self.player = newPlayer
-            } else {
-                print("❌ Invalid URL: \(video.videoURL)")
-                self.playerError = NSError(domain: "VideoPlayerView", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
+                guard let documents = snapshot?.documents else {
+                    print("⚠️ No documents found")
+                    return
+                }
+                
+                print("📄 Found \(documents.count) video documents")
+                
+                Task {
+                    var newVideos: [VideoModel] = []
+                    
+                    for document in documents {
+                        let data = document.data()
+                        print("📝 Processing document: \(document.documentID)")
+                        print("📄 Document data: \(data)")
+                        
+                        let status = data["status"] as? String ?? "unknown"
+                        var videoURL: URL?
+                        
+                        // Try HLS URL first
+                        if status == "completed",
+                           let hlsPath = data["hlsPath"] as? String {
+                            do {
+                                let storageRef = self?.storage.reference().child(hlsPath)
+                                videoURL = try await storageRef?.downloadURL()
+                                print("✅ Got HLS URL: \(videoURL?.absoluteString ?? "")")
+                            } catch {
+                                print("⚠️ Couldn't get HLS URL: \(error.localizedDescription)")
+                            }
+                        }
+                        
+                        // Fallback to original URL if HLS isn't available
+                        if videoURL == nil,
+                           let originalUrlString = data["originalUrl"] as? String,
+                           let url = URL(string: originalUrlString) {
+                            videoURL = url
+                            print("📼 Using original URL: \(url)")
+                        }
+                        
+                        if let finalURL = videoURL {
+                            let video = VideoModel(
+                                id: document.documentID,
+                                hlsURL: finalURL,
+                                status: status,
+                                error: data["error"] as? String
+                            )
+                            newVideos.append(video)
+                        } else {
+                            print("❌ No valid URL found for video: \(document.documentID)")
+                        }
+                    }
+                    
+                    await MainActor.run {
+                        print("📱 Updating UI with \(newVideos.count) videos")
+                        self?.videos = newVideos
+                    }
+                }
             }
-        }
-        .onDisappear {
-            print("🔄 Cleaning up player for video: \(video.videoURL)")
-            player?.pause()
-            player = nil
-            NotificationCenter.default.removeObserver(self)
-        }
     }
+}
+
+struct VideoModel: Identifiable {
+    let id: String
+    let hlsURL: URL
+    let status: String
+    let error: String?
 }
 
 struct HeartAnimation: View {

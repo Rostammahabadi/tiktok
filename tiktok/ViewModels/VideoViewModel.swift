@@ -11,11 +11,13 @@ class VideoViewModel: ObservableObject {
     
     func fetchVideos() async {
         print("🎥 Starting to fetch videos...")
+        print("📂 Storage bucket: \(storage.reference().bucket)")
         await MainActor.run { isLoading = true }
         defer { Task { @MainActor in isLoading = false } }
         
         do {
             print("📝 Querying Firestore collection 'videos'...")
+            // Remove the type filter to get all videos
             let snapshot = try await db.collection("videos")
                 .order(by: "createdAt", descending: true)
                 .getDocuments()
@@ -29,35 +31,48 @@ class VideoViewModel: ObservableObject {
                         let data = document.data()
                         print("📄 Document data: \(data)")
                         
-                        // Get the video path (HLS preferred)
-                        guard let videoPath = (data["hlsPath"] as? String) ?? (data["originalPath"] as? String) else {
-                            print("❌ No video path found in document")
+                        // Check video status
+                        let status = data["status"] as? String ?? "unknown"
+                        print("📊 Video status: \(status)")
+                        
+                        // Get the appropriate video URL based on status
+                        var videoURL: URL?
+                        if status == "completed", let hlsPath = data["hlsPath"] as? String {
+                            // For completed videos, use HLS path
+                            print("🎯 Using HLS path: \(hlsPath)")
+                            do {
+                                videoURL = try await self.storage.reference().child(hlsPath).downloadURL()
+                            } catch {
+                                print("❌ Error getting HLS URL: \(error)")
+                            }
+                        }
+                        
+                        // Fallback to original URL if HLS is not available
+                        if videoURL == nil, let originalUrlString = data["originalUrl"] as? String,
+                           let originalURL = URL(string: originalUrlString) {
+                            print("🎯 Using original URL: \(originalUrlString)")
+                            videoURL = originalURL
+                        }
+                        
+                        guard let finalURL = videoURL else {
+                            print("❌ No valid video URL found")
                             return nil
                         }
                         
-                        print("🎯 Found video path: \(videoPath)")
+                        print("✅ Final video URL: \(finalURL)")
                         
-                        // Convert path to URL
-                        do {
-                            let videoURL = try await self.storage.reference().child(videoPath).downloadURL()
-                            print("✅ Got download URL: \(videoURL)")
-                            
-                            let timestamp = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
-                            
-                            return Video(
-                                id: document.documentID,
-                                title: "Video \(document.documentID.prefix(6))",
-                                description: "Created on \(timestamp)",
-                                author: "User",
-                                videoURL: videoURL.absoluteString,
-                                likes: 0,
-                                views: 0,
-                                timestamp: timestamp
-                            )
-                        } catch {
-                            print("❌ Error getting download URL: \(error)")
-                            return nil
-                        }
+                        let timestamp = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+                        
+                        return Video(
+                            id: document.documentID,
+                            title: data["title"] as? String ?? "Video \(document.documentID.prefix(6))",
+                            description: data["description"] as? String ?? "Created on \(timestamp)",
+                            author: data["author"] as? String ?? "User",
+                            videoURL: finalURL.absoluteString,
+                            likes: data["likes"] as? Int ?? 0,
+                            views: data["views"] as? Int ?? 0,
+                            timestamp: timestamp
+                        )
                     }
                 }
                 
