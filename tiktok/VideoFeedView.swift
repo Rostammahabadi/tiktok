@@ -3,79 +3,52 @@ import AVKit
 import FirebaseFirestore
 import FirebaseStorage
 
-struct VerticalPager<Content: View>: View {
-    let pageCount: Int
-    @Binding var currentIndex: Int
-    let content: Content
-    
-    init(pageCount: Int, currentIndex: Binding<Int>, @ViewBuilder content: () -> Content) {
-        self.pageCount = pageCount
-        self._currentIndex = currentIndex
-        self.content = content()
-        print("🔄 VerticalPager initialized with \(pageCount) pages")
-    }
-    
-    @GestureState private var translation: CGFloat = 0
+
+struct VideoFeedView: View {
+    @StateObject private var viewModel = VideoFeedViewModel()
+    @State private var currentIndex = 0
     
     var body: some View {
         GeometryReader { geometry in
-            LazyVStack(spacing: 0) {
-                self.content.frame(width: geometry.size.width, height: geometry.size.height)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black)
-            .offset(y: -CGFloat(self.currentIndex) * geometry.size.height)
-            .offset(y: self.translation)
-            .animation(.interactiveSpring(response: 0.3), value: currentIndex)
-            .animation(.interactiveSpring(), value: translation)
-            .gesture(
-                DragGesture(minimumDistance: 1).updating(self.$translation) { value, state, _ in
-                    state = value.translation.height
-                }.onEnded { value in
-                    let offset = -Int(value.translation.height)
-                    if abs(offset) > 20 {
-                        let newIndex = currentIndex + min(max(offset, -1), 1)
-                        if newIndex >= 0 && newIndex < pageCount {
-                            print("📱 Switching to video index: \(newIndex)")
-                            self.currentIndex = newIndex
+            ZStack {
+                Color.black.edgesIgnoringSafeArea(.all)
+                
+                if viewModel.videos.isEmpty {
+                    Text("Loading videos...")
+                        .foregroundColor(.white)
+                } else {
+                    VerticalPager(pageCount: viewModel.videos.count, currentIndex: $currentIndex) {
+                        VStack(spacing: 0) {
+                            ForEach(Array(viewModel.videos.enumerated()), id: \.element.id) { index, video in
+                                VideoContainer(video: video, isActive: index == currentIndex)
+                                    .frame(width: geometry.size.width, height: geometry.size.height)
+                            }
                         }
                     }
                 }
-            )
+            }
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            print("📱 VideoFeedView appeared, fetching videos...")
+            viewModel.fetchVideos()
         }
     }
 }
 
-struct VideoFeedView: View {
-    @StateObject private var viewModel = VideoFeedViewModel()
+struct VideoContainer: View {
+    let video: VideoModel
+    let isActive: Bool
     
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                if viewModel.videos.isEmpty {
-                    Text("Loading videos...")
-                        .foregroundColor(.white)
-                        .frame(height: UIScreen.main.bounds.height)
-                } else {
-                    ForEach(viewModel.videos) { video in
-                        if video.status == "completed" {
-                            VideoPlayerView(video: video)
-                                .frame(height: UIScreen.main.bounds.height)
-                        } else if video.status == "processing" {
-                            ProcessingView()
-                                .frame(height: UIScreen.main.bounds.height)
-                        } else if video.status == "failed" {
-                            FailedVideoView(error: video.error ?? "Unknown error")
-                                .frame(height: UIScreen.main.bounds.height)
-                        }
-                    }
-                }
+        ZStack {
+            if video.status == "completed" {
+                VideoPlayerView(video: video, isActive: isActive)
+            } else if video.status == "processing" {
+                ProcessingView()
+            } else if video.status == "failed" {
+                FailedVideoView(error: video.error ?? "Unknown error")
             }
-        }
-        .background(Color.black)
-        .onAppear {
-            print("📱 VideoFeedView appeared, fetching videos...")
-            viewModel.fetchVideos()
         }
     }
 }
@@ -113,6 +86,7 @@ struct FailedVideoView: View {
 
 struct VideoPlayerView: View {
     let video: VideoModel
+    let isActive: Bool
     @State private var player: AVPlayer?
     @State private var isLoading = true
     @State private var error: Error?
@@ -144,16 +118,25 @@ struct VideoPlayerView: View {
             } else if isLoading {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
-            } else {
+                    .scaleEffect(1.5)
+            } else if let player = player {
                 VideoPlayer(player: player)
                     .onDisappear {
                         print("📱 Video player disappearing, cleaning up resources")
-                        player?.pause()
-                        player = nil
-                        playerItem = nil
+                        player.pause()
                         observers.forEach { $0.invalidate() }
                         observers.removeAll()
                     }
+            }
+        }
+        .onChange(of: isActive) { newValue in
+            if newValue {
+                print("📱 Video became active")
+                player?.seek(to: .zero)
+                player?.play()
+            } else {
+                print("📱 Video became inactive")
+                player?.pause()
             }
         }
         .onAppear {
