@@ -118,50 +118,73 @@ struct VideoPlayerView: View {
     @State private var playerItem: AVPlayerItem?
     @State private var observers: [NSKeyValueObservation] = []
     @State private var isUsingFallback = false
+    @State private var isPlaying = false
     
     var body: some View {
-        ZStack {
-            if let error = error {
-                VStack {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                    Text("Error: \(error.localizedDescription)")
-                        .multilineTextAlignment(.center)
-                        .padding()
-                    if !isUsingFallback, video.originalUrl != nil {
-                        Button("Try Original Video") {
-                            isUsingFallback = true
-                            setupPlayer(useOriginal: true)
+        GeometryReader { geometry in
+            ZStack {
+                if let error = error {
+                    VStack {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                        Text("Error: \(error.localizedDescription)")
+                            .multilineTextAlignment(.center)
+                            .padding()
+                        if !isUsingFallback, video.originalUrl != nil {
+                            Button("Try Original Video") {
+                                isUsingFallback = true
+                                setupPlayer(useOriginal: true)
+                            }
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.blue)
+                            .cornerRadius(8)
                         }
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(8)
+                    }
+                    .foregroundColor(.white)
+                } else if isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                } else if let player = player {
+                    ZStack {
+                        CustomVideoPlayer(player: player)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                        
+                        // Play button overlay
+                        if !isPlaying {
+                            Circle()
+                                .fill(Color.black.opacity(0.5))
+                                .frame(width: 80, height: 80)
+                                .overlay(
+                                    Image(systemName: "play.fill")
+                                        .font(.system(size: 30))
+                                        .foregroundColor(.white)
+                                )
+                        }
+                    }
+                    .onTapGesture {
+                        if isPlaying {
+                            player.pause()
+                        } else {
+                            player.play()
+                        }
+                        isPlaying.toggle()
                     }
                 }
-                .foregroundColor(.white)
-            } else if isLoading {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.5)
-            } else if let player = player {
-                VideoPlayer(player: player)
-                    .onDisappear {
-                        print("📱 Video player disappearing, cleaning up resources")
-                        player.pause()
-                        observers.forEach { $0.invalidate() }
-                        observers.removeAll()
-                    }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .onChange(of: isActive) { newValue in
             if newValue {
                 print("📱 Video became active")
                 player?.seek(to: .zero)
                 player?.play()
+                isPlaying = true
             } else {
                 print("📱 Video became inactive")
                 player?.pause()
+                isPlaying = false
             }
         }
         .onAppear {
@@ -199,104 +222,60 @@ struct VideoPlayerView: View {
         }
         
         print("🎬 Setting up player for URL: \(url)")
-        print("🔍 URL scheme: \(url.scheme ?? "none")")
-        print("🔍 URL host: \(url.host ?? "none")")
-        print("🔍 URL path: \(url.path)")
         
-        // Create an AVURLAsset with specific options for HLS
-        let assetOptions = [AVURLAssetAllowsExpensiveNetworkAccessKey: true]
-        let asset = AVURLAsset(url: url, options: assetOptions)
-        print("📦 Created AVURLAsset")
+        let asset = AVAsset(url: url)
         
-        // Load asset properties asynchronously
         Task {
             do {
                 print("🔄 Loading asset properties...")
                 
                 // Load asset properties
                 try await asset.load(.tracks, .duration)
-                let duration = asset.duration
-                print("⏱️ Asset duration: \(duration.seconds) seconds")
-                print("🎬 Number of tracks: \(asset.tracks.count)")
                 
-                // Print track information
-                for track in asset.tracks {
-                    print("🎯 Track: \(track.mediaType.rawValue), enabled: \(track.isEnabled)")
-                }
-                
-                // Create player item with specific options
                 let playerItem = AVPlayerItem(asset: asset)
-                playerItem.preferredForwardBufferDuration = 5 // Buffer up to 5 seconds
-                self.playerItem = playerItem
+                let player = AVPlayer(playerItem: playerItem)
                 
-                // Add KVO observers using modern API
-                let statusObserver = playerItem.observe(\.status) { item, _ in
-                    print("🔄 Player item status changed to: \(item.status.rawValue)")
-                    if item.status == .failed {
-                        print("❌ Player item failed: \(String(describing: item.error))")
-                        if let error = item.error as NSError? {
-                            print("❌ Error domain: \(error.domain)")
-                            print("❌ Error code: \(error.code)")
-                            print("❌ Error description: \(error.localizedDescription)")
-                            print("❌ Error user info: \(error.userInfo)")
-                            
-                            // Check for specific error logs
-                            if let errorLog = item.errorLog() {
-                                print("📝 Error Log:")
-                                for event in errorLog.events {
-                                    print("  - \(event.date): \(event.errorComment ?? "No comment") (Error code: \(event.errorStatusCode))")
-                                }
-                            }
-                            
-                            // Check for access log
-                            if let accessLog = item.accessLog() {
-                                print("📝 Access Log:")
-                                for event in accessLog.events {
-                                    if let uri = event.uri {
-                                        print("  - URI: \(uri)")
-                                    }
-                                    print("    Bytes transferred: \(event.numberOfBytesTransferred)")
-                                    print("    Indicated bitrate: \(event.indicatedBitrate)")
-                                    print("    Observed bitrate: \(event.observedBitrate)")
-                                    if let serverAddress = event.serverAddress {
-                                        print("    Server: \(serverAddress)")
-                                    }
-                                    if event.numberOfServerAddressChanges > 0 {
-                                        print("    Server changes: \(event.numberOfServerAddressChanges)")
-                                    }
-                                    if let startDate = event.playbackStartDate {
-                                        print("    Start date: \(startDate)")
-                                    }
-                                }
-                            }
+                // Observe player status
+                let statusObserver = player.observe(\.timeControlStatus) { player, _ in
+                    DispatchQueue.main.async {
+                        switch player.timeControlStatus {
+                        case .playing:
+                            isPlaying = true
+                        case .paused:
+                            isPlaying = false
+                        default:
+                            break
                         }
-                        self.error = item.error
                     }
                 }
                 observers.append(statusObserver)
                 
-                let bufferEmptyObserver = playerItem.observe(\.isPlaybackBufferEmpty) { item, _ in
-                    print("📊 Playback buffer empty: \(item.isPlaybackBufferEmpty)")
+                // Set up error observation
+                let errorObserver = playerItem.observe(\.status) { item, _ in
+                    if item.status == .failed {
+                        print("❌ PlayerItem failed: \(String(describing: item.error))")
+                        error = item.error
+                        isLoading = false
+                    }
                 }
-                observers.append(bufferEmptyObserver)
+                observers.append(errorObserver)
                 
-                let bufferFullObserver = playerItem.observe(\.isPlaybackBufferFull) { item, _ in
-                    print("📊 Playback buffer full: \(item.isPlaybackBufferFull)")
+                // Configure player
+                player.actionAtItemEnd = .pause
+                player.isMuted = true
+                
+                // Update state
+                self.player = player
+                self.playerItem = playerItem
+                self.isLoading = false
+                
+                if isActive {
+                    print("▶️ Starting playback...")
+                    player.play()
                 }
-                observers.append(bufferFullObserver)
                 
-                let keepUpObserver = playerItem.observe(\.isPlaybackLikelyToKeepUp) { item, _ in
-                    print("📊 Playback likely to keep up: \(item.isPlaybackLikelyToKeepUp)")
-                }
-                observers.append(keepUpObserver)
-                
-                // Create and configure player
-                let player = AVPlayer(playerItem: playerItem)
-                player.automaticallyWaitsToMinimizeStalling = true
-                player.allowsExternalPlayback = true
-                
-                // Add periodic time observer for debugging
-                let interval = CMTime(seconds: 1.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+                // Set up periodic time observer for debugging
+                let interval = CMTime(seconds: 1, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
                 player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
                     print("▶️ Playback time: \(time.seconds) seconds")
                     if let error = playerItem.error {
@@ -304,24 +283,31 @@ struct VideoPlayerView: View {
                     }
                 }
                 
-                await MainActor.run {
-                    self.player = player
-                    self.isLoading = false
-                    print("▶️ Starting playback")
-                    player.play()
-                }
-                
             } catch {
                 print("❌ Error setting up player: \(error.localizedDescription)")
                 if let assetError = error as? AVError {
                     print("❌ AVError code: \(assetError.code.rawValue)")
                 }
-                await MainActor.run {
-                    self.error = error
-                    self.isLoading = false
-                }
+                self.error = error
+                isLoading = false
             }
         }
+    }
+}
+
+struct CustomVideoPlayer: UIViewControllerRepresentable {
+    let player: AVPlayer
+    
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        controller.player = player
+        controller.showsPlaybackControls = false
+        controller.videoGravity = .resizeAspect
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
+        uiViewController.player = player
     }
 }
 
