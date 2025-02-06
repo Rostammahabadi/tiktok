@@ -7,59 +7,106 @@ struct WelcomeView: View {
     @Binding var isLoggedIn: Bool
     @State private var showLogin = false
     @State private var showSignup = false
+    @State private var isAnimating = false
+    
+    let gradientColors: [Color] = [
+        Color(red: 0.98, green: 0.4, blue: 0.4),   // Playful red
+        Color(red: 0.98, green: 0.8, blue: 0.3),   // Warm yellow
+        Color(red: 0.4, green: 0.8, blue: 0.98)    // Sky blue
+    ]
     
     var body: some View {
         ZStack {
-            // Dark gradient background
-            LinearGradient(gradient: Gradient(colors: [Color.black, Color.gray.opacity(0.8)]),
-                           startPoint: .topLeading,
-                           endPoint: .bottomTrailing)
+            // Playful gradient background
+            LinearGradient(gradient: Gradient(colors: gradientColors),
+                         startPoint: .topLeading,
+                         endPoint: .bottomTrailing)
                 .ignoresSafeArea()
+                .overlay(
+                    GeometryReader { geometry in
+                        Circle()
+                            .fill(Color.white.opacity(0.15))
+                            .frame(width: 200, height: 200)
+                            .position(x: geometry.size.width * 0.8,
+                                    y: geometry.size.height * 0.2)
+                            .scaleEffect(isAnimating ? 1.2 : 0.8)
+                            .animation(Animation.easeInOut(duration: 2).repeatForever(autoreverses: true),
+                                     value: isAnimating)
+                    }
+                )
             
-            VStack(spacing: 30) {
+            VStack(spacing: 25) {
                 Spacer()
-                TeacherLogo()
-                    .frame(width: 70, height: 70) // Adjust the frame as needed
                 
+                // Animated logo with improved visibility
+                TeacherLogo()
+                    .frame(width: 90, height: 90)
+                    .scaleEffect(isAnimating ? 1.1 : 1.0)
+                    .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true),
+                             value: isAnimating)
+                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                 
                 Text("TeacherTok")
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .font(.custom("Avenir-Heavy", size: 48))
                     .foregroundColor(.white)
-                    .shadow(color: .black, radius: 2, x: 0, y: 2)
+                    .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 2)
                 
-                Text("A social platform for educators to share engaging content")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(.white.opacity(0.85))
+                // Fun tagline with improved contrast
+                Text("Where Teaching Meets Fun! 🎓✨")
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
+                    .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+                
+                // Achievement preview with improved contrast
+                HStack(spacing: 20) {
+                    AchievementBadge(icon: "star.fill", text: "Create")
+                    AchievementBadge(icon: "person.2.fill", text: "Connect")
+                    AchievementBadge(icon: "lightbulb.fill", text: "Inspire")
+                }
+                .padding(.top, 10)
                 
                 Spacer()
                 
+                // Login buttons with improved contrast
                 VStack(spacing: 16) {
                     Button(action: { showLogin = true }) {
-                        Text("Log in with email")
-                            .font(.headline)
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.white)
-                            .cornerRadius(10)
-                            .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
+                        HStack {
+                            Image(systemName: "graduationcap.fill")
+                                .font(.title3)
+                            Text("Log in to Your Classroom")
+                                .font(.headline)
+                        }
+                        .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.3))
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.white)
+                        .cornerRadius(25)
+                        .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
                     }
                     
                     Button(action: { showSignup = true }) {
-                        Text("Sign up")
-                            .font(.headline)
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.white.opacity(0.9))
-                            .cornerRadius(10)
-                            .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
+                        HStack {
+                            Image(systemName: "pencil.and.outline")
+                                .font(.title3)
+                            Text("Join the Community")
+                                .font(.headline)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.black.opacity(0.2))
+                        .cornerRadius(25)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 25)
+                                .stroke(Color.white, lineWidth: 1.5)
+                        )
+                        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
                     }
                     
                     Button(action: {
-                        // Action for Apple login (to be integrated)
+                        // Action for Apple login
                     }) {
                         HStack {
                             Image(systemName: "apple.logo")
@@ -70,27 +117,61 @@ struct WelcomeView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.white, lineWidth: 1)
+                        .background(Color.black.opacity(0.2))
+                        .cornerRadius(25)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 25)
+                                .stroke(Color.white, lineWidth: 1.5)
                         )
+                        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
                     }
                 }
                 .padding(.horizontal, 30)
                 
-                Text("By continuing, you agree to our Terms of Service and acknowledge that you have read our Privacy Policy")
+                Text("By continuing, you agree to our Terms of Service and Privacy Policy")
                     .font(.caption)
-                    .foregroundColor(.gray)
+                    .foregroundColor(.white)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 30)
                     .padding(.bottom, 20)
+                    .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
             }
+        }
+        .onAppear {
+            isAnimating = true
         }
         .sheet(isPresented: $showLogin) {
             LoginView(isLoggedIn: $isLoggedIn)
         }
         .sheet(isPresented: $showSignup) {
             SignupView(isLoggedIn: $isLoggedIn)
+        }
+    }
+}
+
+// MARK: - Achievement Badge
+struct AchievementBadge: View {
+    let icon: String
+    let text: String
+    
+    var body: some View {
+        VStack {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundColor(.white)
+                .frame(width: 50, height: 50)
+                .background(Color.black.opacity(0.2))
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(Color.white, lineWidth: 2)
+                )
+                .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+            
+            Text(text)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(.white)
+                .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
         }
     }
 }
@@ -104,91 +185,150 @@ struct LoginView: View {
     @State private var password: String = ""
     @State private var errorMessage: String?
     @State private var isLoading: Bool = false
+    @State private var isAnimating: Bool = false
     @FocusState private var focusedField: Field?
     
     enum Field {
         case email, password
     }
     
+    let gradientColors: [Color] = [
+        Color(red: 0.98, green: 0.4, blue: 0.4),   // Playful red
+        Color(red: 0.98, green: 0.8, blue: 0.3),   // Warm yellow
+        Color(red: 0.4, green: 0.8, blue: 0.98)    // Sky blue
+    ]
+    
     var body: some View {
         NavigationView {
             ZStack {
-                // Consistent dark background
-                LinearGradient(gradient: Gradient(colors: [Color.black, Color.gray.opacity(0.8)]),
-                               startPoint: .topLeading,
-                               endPoint: .bottomTrailing)
+                // Matching gradient background
+                LinearGradient(gradient: Gradient(colors: gradientColors),
+                             startPoint: .topLeading,
+                             endPoint: .bottomTrailing)
                     .ignoresSafeArea()
+                    .overlay(
+                        GeometryReader { geometry in
+                            Circle()
+                                .fill(Color.white.opacity(0.15))
+                                .frame(width: 200, height: 200)
+                                .position(x: geometry.size.width * 0.8,
+                                        y: geometry.size.height * 0.2)
+                                .scaleEffect(isAnimating ? 1.2 : 0.8)
+                                .animation(Animation.easeInOut(duration: 2).repeatForever(autoreverses: true),
+                                         value: isAnimating)
+                        }
+                    )
                 
-                VStack(spacing: 20) {
-                    CustomTextField(placeholder: "Email", text: $email)
-                        .focused($focusedField, equals: .email)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .onAppear{
-                            focusedField = .email
+                VStack(spacing: 25) {
+                    // Animated welcome message
+                    VStack(spacing: 10) {
+                        Image(systemName: "graduationcap.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.white)
+                            .scaleEffect(isAnimating ? 1.1 : 1.0)
+                            .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true),
+                                     value: isAnimating)
+                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                        
+                        Text("Welcome Back!")
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+                    }
+                    .padding(.top, 20)
+                    
+                    // Login form with improved styling
+                    VStack(spacing: 20) {
+                        // Email field with icon
+                        HStack(spacing: 12) {
+                            Image(systemName: "envelope.fill")
+                                .foregroundColor(.white)
+                                .font(.title3)
+                                .frame(width: 24)
+                            CustomTextField(placeholder: "Email", text: $email)
+                                .focused($focusedField, equals: .email)
+                                .textContentType(.emailAddress)
+                                .keyboardType(.emailAddress)
                         }
-                    
-                    CustomSecureField(placeholder: "Password", text: $password)
-                        .focused($focusedField, equals: .password)
-                    
-                    if let errorMessage = errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
-                    
-                    Button(action: login) {
-                        if isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.white)
-                                .cornerRadius(10)
-                                .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
-                        } else {
-                            Text("Log in")
-                                .font(.headline)
-                                .foregroundColor(.black)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.white)
-                                .cornerRadius(10)
-                                .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
+                        
+                        // Password field with icon
+                        HStack(spacing: 12) {
+                            Image(systemName: "lock.fill")
+                                .foregroundColor(.white)
+                                .font(.title3)
+                                .frame(width: 24)
+                            CustomSecureField(placeholder: "Password", text: $password)
+                                .focused($focusedField, equals: .password)
                         }
+                        
+                        if let errorMessage = errorMessage {
+                            Text(errorMessage)
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(.horizontal)
+                                .padding(.vertical, 8)
+                                .background(Color.red.opacity(0.3))
+                                .cornerRadius(8)
+                        }
+                        
+                        // Login button with animation
+                        Button(action: login) {
+                            ZStack {
+                                if isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.2, green: 0.2, blue: 0.3)))
+                                } else {
+                                    HStack {
+                                        Image(systemName: "arrow.right.circle.fill")
+                                            .font(.title3)
+                                        Text("Let's Go!")
+                                            .font(.headline)
+                                    }
+                                }
+                            }
+                            .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.3))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.white)
+                            .cornerRadius(25)
+                            .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+                        }
+                        .disabled(isLoading || email.isEmpty || password.isEmpty)
+                        .scaleEffect(isLoading ? 0.95 : 1.0)
+                        .animation(.easeInOut(duration: 0.2), value: isLoading)
+                        
+                        // Forgot Password button with improved styling
+                        Button(action: {
+                            // Implement "Forgot Password?" functionality
+                        }) {
+                            Text("Forgot Password?")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
+                        }
+                        .padding(.top, 10)
                     }
-                    .disabled(isLoading || email.isEmpty || password.isEmpty)
-                    
-                    // Optional: "Forgot Password?" link
-                    Button(action: {
-                        // Implement "Forgot Password?" functionality if needed.
-                    }) {
-                        Text("Forgot Password?")
-                            .font(.subheadline)
-                            .foregroundColor(Color.white.opacity(0.7))
-                    }
-                    .padding(.top, 10)
+                    .padding(.horizontal)
                 }
-                .padding()
-                .padding(.horizontal, 30)
+                .padding(.horizontal, 20)
             }
-            .navigationTitle("Log in")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
                     }
-                    .foregroundColor(.white)
                 }
             }
         }
-         .onAppear{
-             isLoggedIn = true
-         }
+        .onAppear {
+            isAnimating = true
+            focusedField = .email
+        }
     }
-    
-    // MARK: - Firebase Login Function
     
     func login() {
         errorMessage = nil
@@ -199,7 +339,6 @@ struct LoginView: View {
                 errorMessage = error.localizedDescription
                 return
             }
-            // Successfully logged in
             isLoggedIn = true
             dismiss()
         }
@@ -302,10 +441,10 @@ struct SignupView: View {
         Auth.auth().createUser(withEmail: email, password: password) { result, error in
             isLoading = false
             if let error = error {
-        print("Error creating user: \(error.localizedDescription)")
-                    print("Error details: \(error)")
-                    errorMessage = error.localizedDescription
-                    return
+                print("Error creating user: \(error.localizedDescription)")
+                print("Error details: \(error)")
+                errorMessage = error.localizedDescription
+                return
             }
             // Successfully signed up and logged in
             isLoggedIn = true
@@ -315,8 +454,6 @@ struct SignupView: View {
 }
 
 // MARK: - Custom TextField Styles
-
-// MARK: - Updated Custom TextField Styles
 
 struct CustomTextField: View {
     var placeholder: String
@@ -332,6 +469,7 @@ struct CustomTextField: View {
             TextField("", text: $text)
                 .padding()
                 .foregroundColor(.white)
+                .frame(height: 50)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
                         .fill(Color.white.opacity(0.1))
@@ -359,6 +497,7 @@ struct CustomSecureField: View {
             SecureField("", text: $text)
                 .padding()
                 .foregroundColor(.white)
+                .frame(height: 50)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
                         .fill(Color.white.opacity(0.1))
