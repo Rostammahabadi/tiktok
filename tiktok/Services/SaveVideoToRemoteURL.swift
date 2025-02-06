@@ -4,6 +4,8 @@ import FirebaseStorage
 import FirebaseFirestore
 import FirebaseFunctions
 import FirebaseCore
+import AVFoundation
+import FirebaseAuth
 
 class SaveVideoToRemoteURL: NSObject {
     weak var presentingViewController: UIViewController?
@@ -11,50 +13,91 @@ class SaveVideoToRemoteURL: NSObject {
     private let db = Firestore.firestore()
     
     func uploadVideo(from url: URL, result: VideoEditorResult) {
+        // Get current user ID
+        guard let userId = Auth.auth().currentUser?.uid else {
+            print("❌ No authenticated user")
+            return
+        }
+        
         let videoId = UUID().uuidString
         let originalPath = "videos/original/\(videoId).mp4"
         let videoRef = storage.reference().child(originalPath)
         
         print("📤 Starting upload for video: \(videoId)")
         
-        videoRef.putFile(from: url, metadata: nil) { metadata, error in
-            if let error = error {
-                print("❌ Upload error: \(error.localizedDescription)")
-                return
-            }
+        // Generate thumbnail
+        Task {
+            let thumbnailPath = "videos/thumbnails/\(videoId).jpg"
+            let thumbnailRef = storage.reference().child(thumbnailPath)
             
-            print("✅ Upload complete, getting download URL")
-            videoRef.downloadURL { downloadURL, error in
-                if let error = error {
-                    print("❌ Download URL error: \(error.localizedDescription)")
-                    return
-                }
+            if let thumbnailData = try? await generateThumbnail(from: url) {
+                // Upload thumbnail
+                _ = try? await thumbnailRef.putData(thumbnailData, metadata: nil)
+                let thumbnailURL = try? await thumbnailRef.downloadURL()
                 
-                guard let downloadURL = downloadURL else {
-                    print("❌ Download URL is nil")
-                    return
-                }
-                
-                print("✅ Got download URL: \(downloadURL.absoluteString)")
-                let videoData: [String: Any] = [
-                    "originalUrl": downloadURL.absoluteString,
-                    "originalPath": originalPath,
-                    "createdAt": Timestamp(date: Date()),
-                    "status": "processing"
-                ]
-                
-                print("💾 Saving to Firestore...")
-                self.db.collection("videos").document(videoId).setData(videoData) { error in
+                // Upload video
+                videoRef.putFile(from: url, metadata: nil) { metadata, error in
                     if let error = error {
-                        print("❌ Firestore error: \(error.localizedDescription)")
+                        print("❌ Upload error: \(error.localizedDescription)")
                         return
                     }
                     
-                    print("✅ Saved video metadata to Firestore")
-                    self.convertToHLS(filePath: originalPath, videoId: videoId)
+                    print("✅ Upload complete, getting download URL")
+                    videoRef.downloadURL { downloadURL, error in
+                        if let error = error {
+                            print("❌ Download URL error: \(error.localizedDescription)")
+                            return
+                        }
+                        
+                        guard let downloadURL = downloadURL else {
+                            print("❌ Download URL is nil")
+                            return
+                        }
+                        
+                        print("✅ Got download URL: \(downloadURL.absoluteString)")
+                        let videoData: [String: Any] = [
+                            "originalUrl": downloadURL.absoluteString,
+                            "originalPath": originalPath,
+                            "thumbnailUrl": thumbnailURL?.absoluteString,
+                            "thumbnailPath": thumbnailPath,
+                            "createdAt": Timestamp(date: Date()),
+                            "status": "processing",
+                            "authorId": userId,
+                            "title": "Video \(videoId.prefix(6))",
+                            "description": "Created on \(Date())",
+                            "likes": 0,
+                            "views": 0
+                        ]
+                        
+                        print("💾 Saving to Firestore...")
+                        self.db.collection("videos").document(videoId).setData(videoData) { error in
+                            if let error = error {
+                                print("❌ Firestore error: \(error.localizedDescription)")
+                                return
+                            }
+                            
+                            print("✅ Saved video metadata to Firestore")
+                            self.convertToHLS(filePath: originalPath, videoId: videoId)
+                        }
+                    }
                 }
             }
         }
+    }
+    
+    // Add thumbnail generation function
+    private func generateThumbnail(from videoURL: URL) async throws -> Data? {
+        let asset = AVAsset(url: videoURL)
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+        
+        // Get thumbnail from first frame
+        let time = CMTime(seconds: 0, preferredTimescale: 1)
+        let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
+        let uiImage = UIImage(cgImage: cgImage)
+        
+        // Convert to JPEG data with 0.8 quality
+        return uiImage.jpegData(compressionQuality: 0.8)
     }
     
     func convertToHLS(filePath: String, videoId: String) {

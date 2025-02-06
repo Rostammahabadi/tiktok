@@ -10,31 +10,37 @@ struct TeacherProfileView: View {
             id: "1",
             title: "Introduction to Algebra",
             description: "Learn the basics of algebraic equations",
-            author: "Jane Smith",
+            authorId: Auth.auth().currentUser?.uid ?? "",
             videoURL: "", // You'll want to replace with actual video URLs
+            thumbnailURL: nil,
             likes: 245,
             views: 1200,
-            timestamp: Date()
+            timestamp: Date(),
+            status: "completed"
         ),
         Video(
             id: "2",
             title: "The Solar System",
             description: "Explore our cosmic neighborhood",
-            author: "Jane Smith",
+            authorId: Auth.auth().currentUser?.uid ?? "",
             videoURL: "",
+            thumbnailURL: nil,
             likes: 189,
             views: 890,
-            timestamp: Date()
+            timestamp: Date(),
+            status: "completed"
         ),
         Video(
             id: "3",
             title: "World War II",
             description: "A brief overview of WWII",
-            author: "Jane Smith",
+            authorId: Auth.auth().currentUser?.uid ?? "",
             videoURL: "",
+            thumbnailURL: nil,
             likes: 567,
             views: 2300,
-            timestamp: Date()
+            timestamp: Date(),
+            status: "completed"
         )
     ]
     

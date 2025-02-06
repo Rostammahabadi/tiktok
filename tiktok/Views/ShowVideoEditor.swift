@@ -7,6 +7,7 @@ import AVFoundation
 import UIKit
 import FirebaseFirestore
 import FirebaseFunctions
+import FirebaseAuth
 
 // Helper extension for replacing default icons with custom icons
 private extension UIImage {
@@ -75,7 +76,6 @@ class ShowVideoEditor: NSObject {
     }
 
     func showVideoEditor() {
-        // Set the presentingViewController before showing the editor
         saveVideoService.presentingViewController = self.presentingViewController
         
         guard let url = Bundle.main.url(forResource: "Skater", withExtension: "mp4") else { return }
@@ -86,9 +86,28 @@ class ShowVideoEditor: NSObject {
             self.presentingViewController?.dismiss(animated: true, completion: nil)
         }
 
-        videoEditor.saveVideoAction = { result in
-            // No need to use optional chaining since saveVideoService is now a strong reference
-            self.saveVideoService.uploadVideo(from: result.output.url, result: result)
+        videoEditor.saveVideoAction = { [weak self] result in
+            guard let userId = Auth.auth().currentUser?.uid else {
+                print("❌ No authenticated user")
+                return
+            }
+            
+            // Create video metadata
+            let videoMetadata = [
+                "authorId": userId,
+                "createdAt": FieldValue.serverTimestamp(),
+                "title": "Video \(UUID().uuidString.prefix(6))",
+                "description": "Created on \(Date())",
+                "likes": 0,
+                "views": 0,
+                "status": "processing"
+            ] as [String : Any]
+            
+            // Upload without metadata parameter since it's not supported yet
+            self?.saveVideoService.uploadVideo(
+                from: result.output.url,
+                result: result
+            )
         }
 
         let hostingController = UIHostingController(rootView: videoEditor)
