@@ -80,7 +80,24 @@ class ShowVideoEditor: NSObject {
         
         guard let url = Bundle.main.url(forResource: "Skater", withExtension: "mp4") else { return }
         let video = VideoEditorSDK.Video(url: url)
-        var videoEditor = VideoEditorSwiftUIView(video: video)
+        
+        let configuration = Configuration { builder in
+            // Configure the `OverlayToolController` which lets the user
+            // place overlays on top of the video.
+            builder.configureOverlayToolController { options in
+                // By default the editor has an initial overlay intensity of
+                // 100% (1). For this example it only uses 50% (0.5).
+                options.initialOverlayIntensity = 0.5
+                
+                // By default the editor shows a slider to let the user change
+                // the intensity of an overlay. For this example this is disabled.
+                // Thereby the overlays will always have an intensity of 50% (0.5)
+                // since we applied this with the `initialOverlayIntensity`.
+                options.showOverlayIntensitySlider = false
+            }
+        }
+        
+        var videoEditor = VideoEditorSwiftUIView(video: video, configuration: configuration)
 
         videoEditor.dismissAction = {
             self.presentingViewController?.dismiss(animated: true, completion: nil)
@@ -122,9 +139,10 @@ struct VideoEditorSwiftUIView: View {
     
     // The video being edited.
     let video: VideoEditorSDK.Video
+    let configuration: Configuration
     
     var body: some View {
-        VideoEditor(video: video)
+        VideoEditor(video: video, configuration: configuration)
             .onDidSave { result in
                 print("📹 Received video at \(result.output.url.absoluteString)")
                 saveVideoAction?(result)

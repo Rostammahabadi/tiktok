@@ -192,14 +192,12 @@ struct HelpView: View {
             ZStack {
                 Color.black.opacity(0.9).ignoresSafeArea()
                 
-                ScrollView {
-                    VStack(spacing: 25) {
-                        ForEach(helpItems, id: \.title) { item in
-                            HelpItemView(icon: item.icon, title: item.title, description: item.description)
-                        }
+                VStack(spacing: 25) {
+                    ForEach(helpItems, id: \.title) { item in
+                        HelpItemView(icon: item.icon, title: item.title, description: item.description)
                     }
-                    .padding()
                 }
+                .padding()
             }
             .navigationTitle("How to Create")
             .navigationBarTitleDisplayMode(.inline)
