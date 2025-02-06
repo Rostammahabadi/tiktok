@@ -13,7 +13,7 @@ struct VideoFeedView: View {
             ZStack {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
-                if viewModel.isLoading {
+                if viewModel.isLoading && viewModel.videos.isEmpty {
                     VStack {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
@@ -51,8 +51,12 @@ struct VideoFeedView: View {
         }
         .ignoresSafeArea()
         .onAppear {
-            print("📱 VideoFeedView appeared, fetching videos...")
+            print("📱 VideoFeedView appeared, fetching initial videos...")
             viewModel.fetchVideos()
+        }
+        .onChange(of: currentIndex) { newIndex in
+            print("📱 Current video index changed to: \(newIndex)")
+            viewModel.loadMoreIfNeeded(currentIndex: newIndex)
         }
     }
 }
@@ -327,68 +331,116 @@ class VideoFeedViewModel: ObservableObject {
     @Published var error: Error?
     private let db = Firestore.firestore()
     private let storage = Storage.storage()
+    private var lastDocument: DocumentSnapshot?
+    private let batchSize = 2 // Load current and next video
+    private var isFetching = false
     
     func fetchVideos() {
+        guard !isFetching else { return }
         print("🔍 Starting to fetch videos...")
         isLoading = true
+        isFetching = true
+        
+        var query = db.collection("videos")
+            .whereField("status", isEqualTo: "completed")
+            .order(by: "createdAt", descending: true)
+            .limit(to: batchSize)
+        
+        query.getDocuments { [weak self] snapshot, error in
+            guard let self = self else { return }
+            self.isFetching = false
+            
+            if let error = error {
+                print("❌ Error fetching videos: \(error.localizedDescription)")
+                self.error = error
+                self.isLoading = false
+                return
+            }
+            
+            guard let documents = snapshot?.documents, !documents.isEmpty else {
+                print("⚠️ No documents found")
+                self.isLoading = false
+                return
+            }
+            
+            self.lastDocument = documents.last
+            self.processDocuments(documents)
+            self.isLoading = false
+        }
+    }
+    
+    func loadMoreIfNeeded(currentIndex: Int) {
+        // If we're on the second-to-last video, load more
+        if currentIndex >= videos.count - 2 {
+            loadMore()
+        }
+    }
+    
+    private func loadMore() {
+        guard !isFetching, let lastDocument = lastDocument else { return }
+        print("🔄 Loading more videos...")
+        isFetching = true
         
         db.collection("videos")
             .whereField("status", isEqualTo: "completed")
             .order(by: "createdAt", descending: true)
+            .limit(to: batchSize)
+            .start(afterDocument: lastDocument)
             .getDocuments { [weak self] snapshot, error in
                 guard let self = self else { return }
+                self.isFetching = false
                 
                 if let error = error {
-                    print("❌ Error fetching videos: \(error.localizedDescription)")
-                    self.error = error
-                    self.isLoading = false
+                    print("❌ Error loading more videos: \(error.localizedDescription)")
                     return
                 }
                 
-                guard let documents = snapshot?.documents else {
-                    print("⚠️ No documents found")
-                    self.isLoading = false
+                guard let documents = snapshot?.documents, !documents.isEmpty else {
+                    print("⚠️ No more videos to load")
                     return
                 }
                 
-                print("📄 Found \(documents.count) completed video documents")
-                
-                self.videos = documents.compactMap { document -> VideoModel? in
-                    let data = document.data()
-                    print("🎥 Processing video document: \(document.documentID)")
-                    
-                    // Get both URLs
-                    var hlsUrl: URL?
-                    var originalUrl: URL?
-                    
-                    if let hlsUrlString = data["hlsUrl"] as? String {
-                        hlsUrl = URL(string: hlsUrlString)
-                        print("🎯 HLS URL available: \(hlsUrlString)")
-                    }
-                    
-                    if let originalUrlString = data["originalUrl"] as? String {
-                        originalUrl = URL(string: originalUrlString)
-                        print("🎯 Original URL available: \(originalUrlString)")
-                    }
-                    
-                    // Return nil if neither URL is available
-                    guard hlsUrl != nil || originalUrl != nil else {
-                        print("❌ No valid URLs found for video")
-                        return nil
-                    }
-                    
-                    return VideoModel(
-                        id: document.documentID,
-                        hlsUrl: hlsUrl,
-                        originalUrl: originalUrl,
-                        status: "completed",
-                        error: nil
-                    )
-                }
-                
-                print("✅ Processed \(self.videos.count) videos")
-                self.isLoading = false
+                self.lastDocument = documents.last
+                self.processDocuments(documents)
             }
+    }
+    
+    private func processDocuments(_ documents: [QueryDocumentSnapshot]) {
+        let newVideos = documents.compactMap { document -> VideoModel? in
+            let data = document.data()
+            print("🎥 Processing video document: \(document.documentID)")
+            
+            var hlsUrl: URL?
+            var originalUrl: URL?
+            
+            if let hlsUrlString = data["hlsUrl"] as? String {
+                hlsUrl = URL(string: hlsUrlString)
+                print("🎯 HLS URL available: \(hlsUrlString)")
+            }
+            
+            if let originalUrlString = data["originalUrl"] as? String {
+                originalUrl = URL(string: originalUrlString)
+                print("🎯 Original URL available: \(originalUrlString)")
+            }
+            
+            guard hlsUrl != nil || originalUrl != nil else {
+                print("❌ No valid URLs found for video")
+                return nil
+            }
+            
+            return VideoModel(
+                id: document.documentID,
+                hlsUrl: hlsUrl,
+                originalUrl: originalUrl,
+                status: "completed",
+                error: nil
+            )
+        }
+        
+        DispatchQueue.main.async {
+            self.videos.append(contentsOf: newVideos)
+            print("✅ Added \(newVideos.count) new videos. Total: \(self.videos.count)")
+        }
     }
 }
 
