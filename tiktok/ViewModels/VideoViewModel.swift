@@ -142,7 +142,19 @@ class VideoViewModel: ObservableObject {
                         
                         // Get video URLs
                         let videoURL = data["originalUrl"] as? String ?? ""
-                        let thumbnailURL = data["thumbnailUrl"] as? String
+                        let thumbnailPath = data["thumbnailPath"] as? String
+                        
+                        // Get thumbnail URL from Storage if path exists
+                        var thumbnailURL: String?
+                        if let thumbnailPath = thumbnailPath {
+                            do {
+                                let url = try await self.storage.reference().child(thumbnailPath).downloadURL()
+                                thumbnailURL = url.absoluteString
+                            } catch {
+                                print("❌ Error getting thumbnail URL: \(error)")
+                            }
+                        }
+                        
                         let status = data["status"] as? String ?? "pending"
                         let timestamp = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
                         

@@ -178,7 +178,7 @@ struct VideoTrimmerView: View {
     private func generateThumbnails() {
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
-        
+
         let duration = CMTimeGetSeconds(asset.duration)
         let thumbnailCount = 10
         let interval = duration / Double(thumbnailCount)

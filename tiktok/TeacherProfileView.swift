@@ -4,45 +4,8 @@ import FirebaseAuth
 struct TeacherProfileView: View {
     @State private var selectedTab = 0
     @Binding var isLoggedIn: Bool
-    
-    let videos = [
-        Video(
-            id: "1",
-            title: "Introduction to Algebra",
-            description: "Learn the basics of algebraic equations",
-            authorId: Auth.auth().currentUser?.uid ?? "",
-            videoURL: "", // You'll want to replace with actual video URLs
-            thumbnailURL: nil,
-            likes: 245,
-            views: 1200,
-            timestamp: Date(),
-            status: "completed"
-        ),
-        Video(
-            id: "2",
-            title: "The Solar System",
-            description: "Explore our cosmic neighborhood",
-            authorId: Auth.auth().currentUser?.uid ?? "",
-            videoURL: "",
-            thumbnailURL: nil,
-            likes: 189,
-            views: 890,
-            timestamp: Date(),
-            status: "completed"
-        ),
-        Video(
-            id: "3",
-            title: "World War II",
-            description: "A brief overview of WWII",
-            authorId: Auth.auth().currentUser?.uid ?? "",
-            videoURL: "",
-            thumbnailURL: nil,
-            likes: 567,
-            views: 2300,
-            timestamp: Date(),
-            status: "completed"
-        )
-    ]
+    @StateObject private var videoViewModel = VideoViewModel()
+    @State private var isLoading = false
     
     var body: some View {
         NavigationView {
@@ -76,12 +39,23 @@ struct TeacherProfileView: View {
                     
                     if selectedTab == 0 {
                         // Videos grid
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
-                            ForEach(videos) { video in
-                                VideoThumbnail(video: video)
+                        if isLoading {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .padding()
+                        } else if videoViewModel.userVideos.isEmpty {
+                            Text("No videos yet")
+                                .foregroundColor(Theme.textColor.opacity(0.6))
+                                .padding()
+                        } else {
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                                ForEach(videoViewModel.userVideos) { video in
+                                    VideoThumbnail(video: video)
+                                        .frame(maxWidth: .infinity)
+                                }
                             }
+                            .padding(.horizontal, 10)
                         }
-                        .padding(.horizontal)
                     } else {
                         // About section
                         VStack(alignment: .leading, spacing: 10) {
@@ -107,6 +81,11 @@ struct TeacherProfileView: View {
                     }
                 }
             }
+            .task {
+                isLoading = true
+                await videoViewModel.fetchUserVideos()
+                isLoading = false
+            }
         }
     }
     
@@ -122,25 +101,60 @@ struct TeacherProfileView: View {
 
 struct VideoThumbnail: View {
     let video: Video
+    @State private var thumbnail: Image?
+    @State private var isLoading = true
     
     var body: some View {
-        VStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Theme.secondaryColor)
-                .aspectRatio(16/9, contentMode: .fit)
-                .overlay(
-                    Image(systemName: "play.fill")
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack {
+                if let thumbnail = thumbnail {
+                    thumbnail
                         .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 30, height: 30)
-                        .foregroundColor(Theme.textColor)
-                )
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
+                        .clipped()
+                } else if isLoading {
+                    ProgressView()
+                        .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
+                        .background(Color(uiColor: .secondarySystemBackground))
+                } else {
+                    // Fallback thumbnail
+                    RoundedRectangle(cornerRadius: 8)
+                        .foregroundColor(Color(uiColor: .secondarySystemBackground))
+                        .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
+                        .overlay(
+                            Image(systemName: "play.fill")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 24, height: 24)
+                                .foregroundColor(.primary)
+                        )
+                }
+            }
+            .cornerRadius(8)
             
-            Text(video.title)
-                .font(Theme.captionFont)
-                .foregroundColor(Theme.textColor)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(video.title)
+                    .font(.caption)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                Text("\(video.views) views")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 4)
+            .padding(.bottom, 4)
+        }
+        .background(Color(uiColor: .systemBackground))
+        .cornerRadius(8)
+        .shadow(radius: 1, y: 1)
+        .padding(.bottom, 4)
+        .task {
+            if let thumbnail = await video.loadThumbnail() {
+                self.thumbnail = thumbnail
+            }
+            isLoading = false
         }
     }
 }
-

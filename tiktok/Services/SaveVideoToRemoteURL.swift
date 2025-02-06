@@ -32,7 +32,7 @@ class SaveVideoToRemoteURL: NSObject {
             
             if let thumbnailData = try? await generateThumbnail(from: url) {
                 // Upload thumbnail
-                _ = try? await thumbnailRef.putData(thumbnailData, metadata: nil)
+                _ = thumbnailRef.putData(thumbnailData, metadata: nil)
                 let thumbnailURL = try? await thumbnailRef.downloadURL()
                 
                 // Upload video
@@ -87,7 +87,7 @@ class SaveVideoToRemoteURL: NSObject {
     
     // Add thumbnail generation function
     private func generateThumbnail(from videoURL: URL) async throws -> Data? {
-        let asset = AVAsset(url: videoURL)
+        let asset = AVURLAsset(url: videoURL)
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
         
