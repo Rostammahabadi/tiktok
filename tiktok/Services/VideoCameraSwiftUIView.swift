@@ -1,83 +1,141 @@
 import SwiftUI
 import VideoEditorSDK
+import AVKit
+import FirebaseStorage
+import Photos
+import AVFoundation
+import UIKit
+import FirebaseFirestore
+import FirebaseFunctions
+import FirebaseAuth
+
+// Helper extension for replacing default icons with custom icons
+private extension UIImage {
+    func icon(pt: CGFloat, alpha: CGFloat = 1) -> UIImage? {
+        UIGraphicsBeginImageContextWithOptions(CGSize(width: pt, height: pt), false, scale)
+        let position = CGPoint(x: (pt - size.width) / 2, y: (pt - size.height) / 2)
+        draw(at: position, blendMode: .normal, alpha: alpha)
+        let newImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return newImage
+    }
+}
 
 struct VideoCameraSwiftUIView: View {
-  // The action to dismiss the view.
-  internal var dismissAction: (() -> Void)?
-
-  // Create a `Video` from a URL to an image in the app bundle.
+    // MARK: - Properties
+    internal var dismissAction: (() -> Void)?
     @State private var video: VideoEditorSDK.Video?
-
-  // Create a variable indicating whether the editor should be presented.
-  @State private var vesdkPresented: Bool = false
-
-  // The `PhotoEditModel` that preserves the selected filters from the camera.
-  @State private var photoEditModel: PhotoEditModel?
-
-  // Create a `Configuration` object.
-  private let configuration = Configuration { builder in
-    builder.configureCameraViewController { options in
-      // Since we are only using VE.SDK, the camera
-      // should only allow to record/select videos.
-      options.allowedRecordingModes = [.video]
-
-      // By default the camera does not show a cancel button,
-      // so that it can be embedded into any other view. But since it is
-      // presented modally here, a cancel button should be visible.
-      options.showCancelButton = true
-    }
-  }
-
-  // The body of the View.
-  var body: some View {
-    // Create a `Camera`.
-    Camera(configuration: configuration)
-      .onDidCancel {
-        // The user tapped on the cancel button within the camera. Dismissing the view.
-        dismissAction?()
-      }
-      .onDidSave { result in
-        // The user has recorded or selected a video.
-        photoEditModel = result.model
-
-        // The `VideoEditorResult.url` argument will contain the url of the video.
-        if let url = result.url {
-            video = VideoEditorSDK.Video(url: url)
-        }
-      }
-      // In order for the camera to fill out the whole screen it needs
-      // to ignore the safe area.
-      .ignoresSafeArea()
-      .fullScreenCover(isPresented: $vesdkPresented) {
-        dismissAction?()
-      } content: {
-        if let video = video {
-          // Create a `VideoEditor`.
-          VideoEditor(video: video, configuration: configuration, photoEditModel: photoEditModel)
-            .onDidSave { result in
-              // The user exported a new video successfully and the newly generated video is located at `result.output.url` of the returned `VideoEditorResult`. Dismissing the editor.
-              print("Received video at \(result.output.url.absoluteString)")
-              dismissAction?()
+    @State private var vesdkPresented: Bool = false
+    @State private var photoEditModel: PhotoEditModel?
+    private let saveVideoService = SaveVideoToRemoteURL()
+    
+    // MARK: - Configuration
+    private let configuration: Configuration = {
+        // Set up custom icons
+        let config = UIImage.SymbolConfiguration(scale: .large)
+        IMGLY.bundleImageBlock = { imageName in
+            switch imageName {
+            case "imgly_icon_cancel_44pt":
+                return UIImage(systemName: "multiply.circle.fill", withConfiguration: config)?.icon(pt: 44, alpha: 0.6)
+            case "imgly_icon_approve_44pt":
+                return UIImage(systemName: "checkmark.circle.fill", withConfiguration: config)?.icon(pt: 44, alpha: 0.6)
+            case "imgly_icon_save":
+                return UIImage(systemName: "arrow.up.circle.fill", withConfiguration: config)?.icon(pt: 44, alpha: 0.6)
+            case "imgly_icon_undo_48pt":
+                return UIImage(systemName: "arrow.uturn.backward", withConfiguration: config)?.icon(pt: 48)
+            case "imgly_icon_redo_48pt":
+                return UIImage(systemName: "arrow.uturn.forward", withConfiguration: config)?.icon(pt: 48)
+            case "imgly_icon_play_48pt":
+                return UIImage(systemName: "play.fill", withConfiguration: config)?.icon(pt: 48)
+            case "imgly_icon_pause_48pt":
+                return UIImage(systemName: "pause.fill", withConfiguration: config)?.icon(pt: 48)
+            case "imgly_icon_sound_on_48pt":
+                return UIImage(systemName: "speaker.wave.2.fill", withConfiguration: config)?.icon(pt: 48)
+            case "imgly_icon_sound_off_48pt":
+                return UIImage(systemName: "speaker.slash.fill", withConfiguration: config)?.icon(pt: 48)
+            default:
+                return nil
             }
+        }
+        
+        return Configuration { builder in
+            // Configure camera
+            builder.configureCameraViewController { options in
+                options.allowedRecordingModes = [.video]
+                options.showCancelButton = true
+            }
+            
+            // Configure overlay tool
+            builder.configureOverlayToolController { options in
+                options.initialOverlayIntensity = 0.5
+                options.showOverlayIntensitySlider = false
+            }
+            
+            builder.theme = .dynamic
+        }
+    }()
+
+    // MARK: - Body
+    var body: some View {
+        Camera(configuration: configuration)
             .onDidCancel {
-              // The user tapped on the cancel button within the editor. Dismissing the editor.
-              dismissAction?()
+                dismissAction?()
             }
-            .onDidFail { error in
-              // There was an error generating the video.
-              print("Editor finished with error: \(error.localizedDescription)")
-              // Dismissing the editor.
-              dismissAction?()
+            .onDidSave { result in
+                photoEditModel = result.model
+                if let url = result.url {
+                    video = VideoEditorSDK.Video(url: url)
+                }
             }
-            // In order for the video editor to fill out the whole screen it needs
-            // to ignore the safe area.
             .ignoresSafeArea()
+            .fullScreenCover(isPresented: $vesdkPresented) {
+                dismissAction?()
+            } content: {
+                if let video = video {
+                    VideoEditor(video: video, configuration: configuration, photoEditModel: photoEditModel)
+                        .onDidSave { result in
+                            handleVideoSave(result)
+                        }
+                        .onDidCancel {
+                            dismissAction?()
+                        }
+                        .onDidFail { error in
+                            print("Editor failed with error: \(error.localizedDescription)")
+                            dismissAction?()
+                        }
+                        .ignoresSafeArea()
+                }
+            }
+            .onChange(of: video) { _ in
+                vesdkPresented = true
+            }
+    }
+    
+    // MARK: - Private Methods
+    private func handleVideoSave(_ result: VideoEditorResult) {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            print("❌ No authenticated user")
+            dismissAction?()
+            return
         }
-      }
-      // Listen to changes of the video in order to present
-      // the editor.
-      .onChange(of: video) { _ in
-        vesdkPresented = true
-      }
-  }
+        
+        // Create video metadata
+        let videoMetadata = [
+            "authorId": userId,
+            "createdAt": FieldValue.serverTimestamp(),
+            "title": "Video \(UUID().uuidString.prefix(6))",
+            "description": "Created on \(Date())",
+            "status": "processing",
+            "isDeleted": false
+        ] as [String : Any]
+        
+        // Upload video
+        saveVideoService.uploadVideo(
+            from: result.output.url,
+            result: result
+        )
+        
+        print("📹 Received video at \(result.output.url.absoluteString)")
+        dismissAction?()
+    }
 }
