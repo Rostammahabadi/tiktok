@@ -1,0 +1,12 @@
+{
+  "name": "tiktok-test-data",
+  "version": "1.0.0",
+  "description": "Generate test videos for TikTok clone",
+  "main": "generate_test_videos.js",
+  "dependencies": {
+    "firebase-admin": "^11.8.0",
+    "google-auth-library": "^9.15.1",
+    "node-fetch": "^2.6.1",
+    "uuid": "^9.0.0"
+  }
+}

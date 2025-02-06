@@ -58,5 +58,5 @@ xcuserdata/
 *.log
 *.tmp
 .windsurfrules
-scripts/
+scripts/node_modules/
 tiktok-2c2fa-firebase-adminsdk-fbsvc-6e0aafe71b.json

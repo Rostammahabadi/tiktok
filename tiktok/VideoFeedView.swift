@@ -13,8 +13,29 @@ struct VideoFeedView: View {
             ZStack {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
-                if viewModel.videos.isEmpty {
-                    Text("Loading videos...")
+                if viewModel.isLoading {
+                    VStack {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        Text("Loading videos...")
+                            .foregroundColor(.white)
+                            .padding(.top)
+                    }
+                } else if let error = viewModel.error {
+                    VStack {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundColor(.white)
+                        Text("Error loading videos")
+                            .foregroundColor(.white)
+                        Text(error.localizedDescription)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding()
+                    }
+                } else if viewModel.videos.isEmpty {
+                    Text("No videos available")
                         .foregroundColor(.white)
                 } else {
                     VerticalPager(pageCount: viewModel.videos.count, currentIndex: $currentIndex) {
@@ -302,34 +323,39 @@ struct VideoPlayerView: View {
 
 class VideoFeedViewModel: ObservableObject {
     @Published var videos: [VideoModel] = []
+    @Published var isLoading = true
+    @Published var error: Error?
     private let db = Firestore.firestore()
     private let storage = Storage.storage()
     
     func fetchVideos() {
         print("🔍 Starting to fetch videos...")
+        isLoading = true
         
         db.collection("videos")
+            .whereField("status", isEqualTo: "completed")
             .order(by: "createdAt", descending: true)
-            .addSnapshotListener { [weak self] snapshot, error in
+            .getDocuments { [weak self] snapshot, error in
+                guard let self = self else { return }
+                
                 if let error = error {
                     print("❌ Error fetching videos: \(error.localizedDescription)")
+                    self.error = error
+                    self.isLoading = false
                     return
                 }
                 
                 guard let documents = snapshot?.documents else {
                     print("⚠️ No documents found")
+                    self.isLoading = false
                     return
                 }
                 
-                print("📄 Found \(documents.count) video documents")
+                print("📄 Found \(documents.count) completed video documents")
                 
-                self?.videos = documents.compactMap { document -> VideoModel? in
+                self.videos = documents.compactMap { document -> VideoModel? in
                     let data = document.data()
                     print("🎥 Processing video document: \(document.documentID)")
-                    
-                    // Check video status
-                    let status = data["status"] as? String ?? "unknown"
-                    print("📊 Video status: \(status)")
                     
                     // Get both URLs
                     var hlsUrl: URL?
@@ -344,7 +370,6 @@ class VideoFeedViewModel: ObservableObject {
                         originalUrl = URL(string: originalUrlString)
                         print("🎯 Original URL available: \(originalUrlString)")
                     }
-
                     
                     // Return nil if neither URL is available
                     guard hlsUrl != nil || originalUrl != nil else {
@@ -356,12 +381,13 @@ class VideoFeedViewModel: ObservableObject {
                         id: document.documentID,
                         hlsUrl: hlsUrl,
                         originalUrl: originalUrl,
-                        status: status,
-                        error: data["error"] as? String
+                        status: "completed",
+                        error: nil
                     )
                 }
                 
-                print("✅ Processed \(self?.videos.count ?? 0) videos")
+                print("✅ Processed \(self.videos.count) videos")
+                self.isLoading = false
             }
     }
 }
