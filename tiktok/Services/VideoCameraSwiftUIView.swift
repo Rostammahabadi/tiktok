@@ -97,23 +97,24 @@ struct VideoCameraSwiftUIView: View {
                         VideoEditor(video: video, configuration: configuration, photoEditModel: photoEditModel)
                             .onDidSave { result in
                                 handleVideoSave(result)
+                                // Show the graduation bird animation after successful save
+                                showBirdAnimation = true
                             }
                             .onDidCancel {
                                 dismissAction?()
                             }
-                            .onDidFail { error in
-                                print("Editor failed with error: \(error.localizedDescription)")
-                                dismissAction?()
-                            }
-                            .ignoresSafeArea()
                     }
                 }
                 .onChange(of: video) { _ in
                     vesdkPresented = true
                 }
             
+            // Overlay the graduation bird animation
             GraduationBirdAnimation(isShowing: $showBirdAnimation) {
-                dismissAction?()
+                // After animation completes
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    dismissAction?()
+                }
             }
         }
     }
@@ -143,8 +144,5 @@ struct VideoCameraSwiftUIView: View {
         )
         
         print("📹 Received video at \(result.output.url.absoluteString)")
-        
-        // Show bird animation before dismissing
-        showBirdAnimation = true
     }
 }
