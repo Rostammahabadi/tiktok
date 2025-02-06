@@ -143,23 +143,29 @@ struct VideoEditorSwiftUIView: View {
     let video: VideoEditorSDK.Video
     let configuration: Configuration
     
+    @State private var showBirdAnimation = false
+    
     var body: some View {
-        VideoEditor(video: video, configuration: configuration)
-            .onDidSave { result in
-                print("📹 Received video at \(result.output.url.absoluteString)")
-                saveVideoAction?(result)
+        ZStack {
+            VideoEditor(video: video, configuration: configuration)
+                .onDidSave { result in
+                    print("📹 Received video at \(result.output.url.absoluteString)")
+                    saveVideoAction?(result)
+                    showBirdAnimation = true
+                }
+                .onDidCancel {
+                    print("🚫 Editor cancelled")
+                    dismissAction?()
+                }
+                .onDidFail { error in
+                    print("❌ Editor failed: \(error.localizedDescription)")
+                    dismissAction?()
+                }
+                .ignoresSafeArea()
+            
+            GraduationBirdAnimation(isShowing: $showBirdAnimation) {
                 dismissAction?()
             }
-            .onDidCancel {
-                print("🚫 Editor cancelled")
-                dismissAction?()
-            }
-            .onDidFail { error in
-                print("❌ Editor failed: \(error.localizedDescription)")
-                dismissAction?()
-            }
-            // In order for the editor to fill out the whole screen it needs
-            // to ignore the safe area.
-            .ignoresSafeArea()
+        }
     }
 }

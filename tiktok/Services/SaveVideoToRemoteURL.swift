@@ -25,61 +25,66 @@ class SaveVideoToRemoteURL: NSObject {
         
         print("📤 Starting upload for video: \(videoId)")
         
-        // Generate thumbnail
+        // Process video before upload
         Task {
-            let thumbnailPath = "videos/thumbnails/\(videoId).jpg"
-            let thumbnailRef = storage.reference().child(thumbnailPath)
-            
-            if let thumbnailData = try? await generateThumbnail(from: url) {
-                // Upload thumbnail
-                _ = thumbnailRef.putData(thumbnailData, metadata: nil)
-                let thumbnailURL = try? await thumbnailRef.downloadURL()
+            do {
+                let processedVideoURL = try await processVideo(from: url)
+                let thumbnailPath = "videos/thumbnails/\(videoId).jpg"
+                let thumbnailRef = storage.reference().child(thumbnailPath)
                 
-                // Upload video
-                videoRef.putFile(from: url, metadata: nil) { metadata, error in
-                    if let error = error {
-                        print("❌ Upload error: \(error.localizedDescription)")
-                        return
-                    }
+                if let thumbnailData = try? await generateThumbnail(from: processedVideoURL) {
+                    // Upload thumbnail
+                    _ = thumbnailRef.putData(thumbnailData, metadata: nil)
+                    let thumbnailURL = try? await thumbnailRef.downloadURL()
                     
-                    print("✅ Upload complete, getting download URL")
-                    videoRef.downloadURL { downloadURL, error in
+                    // Upload processed video
+                    videoRef.putFile(from: processedVideoURL, metadata: nil) { metadata, error in
                         if let error = error {
-                            print("❌ Download URL error: \(error.localizedDescription)")
+                            print("❌ Upload error: \(error.localizedDescription)")
                             return
                         }
                         
-                        guard let downloadURL = downloadURL else {
-                            print("❌ Download URL is nil")
-                            return
-                        }
-                        
-                        print("✅ Got download URL: \(downloadURL.absoluteString)")
-                        let videoData: [String: Any] = [
-                            "originalUrl": downloadURL.absoluteString,
-                            "originalPath": originalPath,
-                            "thumbnailUrl": thumbnailURL?.absoluteString,
-                            "thumbnailPath": thumbnailPath,
-                            "createdAt": Timestamp(date: Date()),
-                            "status": "processing",
-                            "authorId": userId,
-                            "title": "Video \(videoId.prefix(6))",
-                            "description": "Created on \(Date())",
-                            "isDeleted": false
-                        ]
-                        
-                        print("💾 Saving to Firestore...")
-                        self.db.collection("videos").document(videoId).setData(videoData) { error in
+                        print("✅ Upload complete, getting download URL")
+                        videoRef.downloadURL { downloadURL, error in
                             if let error = error {
-                                print("❌ Firestore error: \(error.localizedDescription)")
+                                print("❌ Download URL error: \(error.localizedDescription)")
                                 return
                             }
                             
-                            print("✅ Saved video metadata to Firestore")
-                            self.convertToHLS(filePath: originalPath, videoId: videoId)
+                            guard let downloadURL = downloadURL else {
+                                print("❌ Download URL is nil")
+                                return
+                            }
+                            
+                            print("✅ Got download URL: \(downloadURL.absoluteString)")
+                            let videoData: [String: Any] = [
+                                "originalUrl": downloadURL.absoluteString,
+                                "originalPath": originalPath,
+                                "thumbnailUrl": thumbnailURL?.absoluteString,
+                                "thumbnailPath": thumbnailPath,
+                                "createdAt": Timestamp(date: Date()),
+                                "status": "processing",
+                                "authorId": userId,
+                                "title": "Video \(videoId.prefix(6))",
+                                "description": "Created on \(Date())",
+                                "isDeleted": false
+                            ]
+                            
+                            print("💾 Saving to Firestore...")
+                            self.db.collection("videos").document(videoId).setData(videoData) { error in
+                                if let error = error {
+                                    print("❌ Firestore error: \(error.localizedDescription)")
+                                    return
+                                }
+                                
+                                print("✅ Saved video metadata to Firestore")
+                                self.convertToHLS(filePath: originalPath, videoId: videoId)
+                            }
                         }
                     }
                 }
+            } catch {
+                print("❌ Video processing error: \(error.localizedDescription)")
             }
         }
     }
@@ -204,5 +209,32 @@ class SaveVideoToRemoteURL: NSObject {
             
             task.resume()  // ✅ Ensuring network request runs
         }
+    }
+    
+    // Add this new method
+    private func processVideo(from sourceURL: URL) async throws -> URL {
+        let asset = AVAsset(url: sourceURL)
+        
+        // Create temp output URL
+        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).mp4")
+        
+        // Configure export session
+        let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality)
+        exportSession?.outputURL = outputURL
+        exportSession?.outputFileType = .mp4
+        exportSession?.shouldOptimizeForNetworkUse = true
+        
+        // Export the video
+        if let exportSession = exportSession {
+            await exportSession.export()
+            
+            if exportSession.status == .completed {
+                return outputURL
+            } else if let error = exportSession.error {
+                throw error
+            }
+        }
+        
+        throw NSError(domain: "VideoProcessing", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to process video"])
     }
 }

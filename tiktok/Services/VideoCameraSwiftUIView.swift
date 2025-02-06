@@ -28,6 +28,7 @@ struct VideoCameraSwiftUIView: View {
     @State private var vesdkPresented: Bool = false
     @State private var photoEditModel: PhotoEditModel?
     private let saveVideoService = SaveVideoToRemoteURL()
+    @State private var showBirdAnimation = false
     
     // MARK: - Configuration
     private let configuration: Configuration = {
@@ -77,38 +78,44 @@ struct VideoCameraSwiftUIView: View {
 
     // MARK: - Body
     var body: some View {
-        Camera(configuration: configuration)
-            .onDidCancel {
+        ZStack {
+            Camera(configuration: configuration)
+                .onDidCancel {
+                    dismissAction?()
+                }
+                .onDidSave { result in
+                    photoEditModel = result.model
+                    if let url = result.url {
+                        video = VideoEditorSDK.Video(url: url)
+                    }
+                }
+                .ignoresSafeArea()
+                .fullScreenCover(isPresented: $vesdkPresented) {
+                    dismissAction?()
+                } content: {
+                    if let video = video {
+                        VideoEditor(video: video, configuration: configuration, photoEditModel: photoEditModel)
+                            .onDidSave { result in
+                                handleVideoSave(result)
+                            }
+                            .onDidCancel {
+                                dismissAction?()
+                            }
+                            .onDidFail { error in
+                                print("Editor failed with error: \(error.localizedDescription)")
+                                dismissAction?()
+                            }
+                            .ignoresSafeArea()
+                    }
+                }
+                .onChange(of: video) { _ in
+                    vesdkPresented = true
+                }
+            
+            GraduationBirdAnimation(isShowing: $showBirdAnimation) {
                 dismissAction?()
             }
-            .onDidSave { result in
-                photoEditModel = result.model
-                if let url = result.url {
-                    video = VideoEditorSDK.Video(url: url)
-                }
-            }
-            .ignoresSafeArea()
-            .fullScreenCover(isPresented: $vesdkPresented) {
-                dismissAction?()
-            } content: {
-                if let video = video {
-                    VideoEditor(video: video, configuration: configuration, photoEditModel: photoEditModel)
-                        .onDidSave { result in
-                            handleVideoSave(result)
-                        }
-                        .onDidCancel {
-                            dismissAction?()
-                        }
-                        .onDidFail { error in
-                            print("Editor failed with error: \(error.localizedDescription)")
-                            dismissAction?()
-                        }
-                        .ignoresSafeArea()
-                }
-            }
-            .onChange(of: video) { _ in
-                vesdkPresented = true
-            }
+        }
     }
     
     // MARK: - Private Methods
@@ -136,6 +143,8 @@ struct VideoCameraSwiftUIView: View {
         )
         
         print("📹 Received video at \(result.output.url.absoluteString)")
-        dismissAction?()
+        
+        // Show bird animation before dismissing
+        showBirdAnimation = true
     }
 }
