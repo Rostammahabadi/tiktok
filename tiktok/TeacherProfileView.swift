@@ -1,11 +1,14 @@
 import SwiftUI
 import FirebaseAuth
+import AVKit
 
 struct TeacherProfileView: View {
     @State private var selectedTab = 0
     @Binding var isLoggedIn: Bool
     @StateObject private var videoViewModel = VideoViewModel()
     @State private var isLoading = false
+    @State private var selectedVideo: Video?
+    @State private var isVideoPlayerPresented = false
     
     var body: some View {
         NavigationView {
@@ -39,7 +42,7 @@ struct TeacherProfileView: View {
                     
                     if selectedTab == 0 {
                         // Videos grid
-                        if isLoading {
+                        if videoViewModel.isLoading {
                             ProgressView()
                                 .scaleEffect(1.5)
                                 .padding()
@@ -52,6 +55,10 @@ struct TeacherProfileView: View {
                                 ForEach(videoViewModel.userVideos) { video in
                                     VideoThumbnail(video: video)
                                         .frame(maxWidth: .infinity)
+                                        .onTapGesture {
+                                            selectedVideo = video
+                                            isVideoPlayerPresented = true
+                                        }
                                 }
                             }
                             .padding(.horizontal, 10)
@@ -82,9 +89,13 @@ struct TeacherProfileView: View {
                 }
             }
             .task {
-                isLoading = true
                 await videoViewModel.fetchUserVideos()
-                isLoading = false
+            }
+            .refreshable {
+                await videoViewModel.fetchUserVideos()
+            }
+            .sheet(isPresented: $isVideoPlayerPresented) {
+                videoPlayerSheet
             }
         }
     }
@@ -97,12 +108,21 @@ struct TeacherProfileView: View {
             print("Error signing out: \(error.localizedDescription)")
         }
     }
+    
+    var videoPlayerSheet: some View {
+        Group {
+            if let video = selectedVideo {
+                VideoPlayerSheet(video: video)
+            }
+        }
+    }
 }
 
 struct VideoThumbnail: View {
     let video: Video
     @State private var thumbnail: Image?
     @State private var isLoading = true
+    @State private var loadError = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -118,16 +138,26 @@ struct VideoThumbnail: View {
                         .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
                         .background(Color(uiColor: .secondarySystemBackground))
                 } else {
-                    // Fallback thumbnail
-                    RoundedRectangle(cornerRadius: 8)
+                    // Fallback thumbnail or error state
+                    Rectangle()
                         .foregroundColor(Color(uiColor: .secondarySystemBackground))
                         .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
                         .overlay(
-                            Image(systemName: "play.fill")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 24, height: 24)
-                                .foregroundColor(.primary)
+                            Group {
+                                if loadError {
+                                    Image(systemName: "photo.fill")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 30, height: 30)
+                                        .foregroundColor(.gray)
+                                } else {
+                                    Image(systemName: "play.fill")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 24, height: 24)
+                                        .foregroundColor(.primary)
+                                }
+                            }
                         )
                 }
             }
@@ -151,10 +181,90 @@ struct VideoThumbnail: View {
         .shadow(radius: 1, y: 1)
         .padding(.bottom, 4)
         .task {
+            isLoading = true
+            loadError = false
             if let thumbnail = await video.loadThumbnail() {
                 self.thumbnail = thumbnail
+                isLoading = false
+            } else {
+                loadError = true
+                isLoading = false
             }
+        }
+    }
+}
+
+struct VideoPlayerSheet: View {
+    let video: Video
+    @Environment(\.presentationMode) var presentationMode
+    @State private var player: AVPlayer?
+    @State private var isLoading = true
+    @State private var error: Error?
+    
+    var body: some View {
+        ZStack {
+            Color.black.edgesIgnoringSafeArea(.all)
+            
+            if let player = player {
+                VideoPlayer(player: player)
+                    .edgesIgnoringSafeArea(.all)
+            }
+            
+            if isLoading {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            }
+            
+            VStack {
+                HStack {
+                    Button(action: {
+                        player?.pause()
+                        presentationMode.wrappedValue.dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Circle().fill(Color.black.opacity(0.6)))
+                    }
+                    Spacer()
+                }
+                Spacer()
+            }
+            .padding()
+        }
+        .onAppear {
+            setupPlayer()
+        }
+        .onDisappear {
+            player?.pause()
+            player = nil
+        }
+    }
+    
+    private func setupPlayer() {
+        guard let url = URL(string: video.videoURL) else {
+            error = NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid video URL"])
             isLoading = false
+            return
+        }
+        
+        let playerItem = AVPlayerItem(url: url)
+        let newPlayer = AVPlayer(playerItem: playerItem)
+        
+        // Observe when the item is ready to play
+        NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: playerItem, queue: .main) { _ in
+            newPlayer.seek(to: .zero)
+            newPlayer.play()
+        }
+        
+        self.player = newPlayer
+        
+        // Start playing when ready
+        playerItem.asset.loadValuesAsynchronously(forKeys: ["playable"]) {
+            DispatchQueue.main.async {
+                self.isLoading = false
+                newPlayer.play()
+            }
         }
     }
 }

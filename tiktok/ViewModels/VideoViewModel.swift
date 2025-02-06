@@ -39,6 +39,23 @@ class VideoViewModel: ObservableObject {
                         
                         // Get the appropriate video URL based on status
                         var videoURL: URL?
+                        var thumbnailURL: String?
+                        
+                        // Try to get thumbnail URL
+                        if let thumbnailPath = data["thumbnailPath"] as? String {
+                            print("🖼️ Found thumbnail path: \(thumbnailPath)")
+                            do {
+                                let url = try await self.storage.reference().child(thumbnailPath).downloadURL()
+                                thumbnailURL = url.absoluteString
+                                print("✅ Got thumbnail URL: \(thumbnailURL ?? "nil")")
+                            } catch {
+                                print("❌ Error getting thumbnail URL: \(error)")
+                            }
+                        } else if let directThumbnailUrl = data["thumbnailUrl"] as? String {
+                            print("🖼️ Using direct thumbnail URL: \(directThumbnailUrl)")
+                            thumbnailURL = directThumbnailUrl
+                        }
+                        
                         if status == "completed", let hlsPath = data["hlsPath"] as? String {
                             // For completed videos, use HLS path
                             print("🎯 Using HLS path: \(hlsPath)")
@@ -71,7 +88,7 @@ class VideoViewModel: ObservableObject {
                             description: data["description"] as? String ?? "Created on \(timestamp)",
                             authorId: data["authorId"] as? String ?? "unknown",
                             videoURL: finalURL.absoluteString,
-                            thumbnailURL: data["thumbnailUrl"] as? String,
+                            thumbnailURL: thumbnailURL,
                             likes: data["likes"] as? Int ?? 0,
                             views: data["views"] as? Int ?? 0,
                             timestamp: timestamp,
@@ -123,47 +140,84 @@ class VideoViewModel: ObservableObject {
     }
     
     func fetchUserVideos() async {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
+        print("🎥 Starting to fetch user videos...")
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            print("❌ No current user found")
+            return
+        }
         
-        print("🎥 Fetching videos for user: \(userId)")
         await MainActor.run { isLoading = true }
         defer { Task { @MainActor in isLoading = false } }
         
         do {
+            print("📝 Querying Firestore collection 'videos' for user: \(currentUserId)")
             let snapshot = try await db.collection("videos")
-                .whereField("authorId", isEqualTo: userId)
+                .whereField("authorId", isEqualTo: currentUserId)
                 .order(by: "createdAt", descending: true)
                 .getDocuments()
             
-            let userVideos = try await withThrowingTaskGroup(of: Video?.self) { group in
+            print("📊 Found \(snapshot.documents.count) user videos in Firestore")
+            
+            let fetchedVideos = try await withThrowingTaskGroup(of: Video?.self) { group in
                 for document in snapshot.documents {
                     group.addTask {
+                        print("\n🔍 Processing user video ID: \(document.documentID)")
                         let data = document.data()
                         
-                        // Get video URLs
-                        let videoURL = data["originalUrl"] as? String ?? ""
-                        let thumbnailPath = data["thumbnailPath"] as? String
+                        // Check video status
+                        let status = data["status"] as? String ?? "unknown"
+                        print("📊 Video status: \(status)")
                         
-                        // Get thumbnail URL from Storage if path exists
+                        // Get the appropriate video URL based on status
+                        var videoURL: URL?
                         var thumbnailURL: String?
-                        if let thumbnailPath = thumbnailPath {
+                        
+                        // Try to get thumbnail URL
+                        if let thumbnailPath = data["thumbnailPath"] as? String {
+                            print("🖼️ Found thumbnail path: \(thumbnailPath)")
                             do {
                                 let url = try await self.storage.reference().child(thumbnailPath).downloadURL()
                                 thumbnailURL = url.absoluteString
+                                print("✅ Got thumbnail URL: \(thumbnailURL ?? "nil")")
                             } catch {
                                 print("❌ Error getting thumbnail URL: \(error)")
                             }
+                        } else if let directThumbnailUrl = data["thumbnailUrl"] as? String {
+                            print("🖼️ Using direct thumbnail URL: \(directThumbnailUrl)")
+                            thumbnailURL = directThumbnailUrl
                         }
                         
-                        let status = data["status"] as? String ?? "pending"
+                        if status == "completed", let hlsPath = data["hlsPath"] as? String {
+                            print("🎯 Using HLS path: \(hlsPath)")
+                            do {
+                                videoURL = try await self.storage.reference().child(hlsPath).downloadURL()
+                            } catch {
+                                print("❌ Error getting HLS URL: \(error)")
+                            }
+                        }
+                        
+                        // Fallback to original URL if HLS is not available
+                        if videoURL == nil, let originalUrlString = data["originalUrl"] as? String,
+                           let originalURL = URL(string: originalUrlString) {
+                            print("🎯 Using original URL: \(originalUrlString)")
+                            videoURL = originalURL
+                        }
+                        
+                        guard let finalURL = videoURL else {
+                            print("❌ No valid video URL found")
+                            return nil
+                        }
+                        
+                        print("✅ Final video URL: \(finalURL)")
+                        
                         let timestamp = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
                         
                         return Video(
                             id: document.documentID,
-                            title: data["title"] as? String ?? "Untitled",
-                            description: data["description"] as? String ?? "",
-                            authorId: data["authorId"] as? String ?? userId,
-                            videoURL: videoURL,
+                            title: data["title"] as? String ?? "Video \(document.documentID.prefix(6))",
+                            description: data["description"] as? String ?? "Created on \(timestamp)",
+                            authorId: data["authorId"] as? String ?? "unknown",
+                            videoURL: finalURL.absoluteString,
                             thumbnailURL: thumbnailURL,
                             likes: data["likes"] as? Int ?? 0,
                             views: data["views"] as? Int ?? 0,
@@ -182,12 +236,19 @@ class VideoViewModel: ObservableObject {
                 return videos
             }
             
-            await MainActor.run {
-                self.userVideos = userVideos
-            }
+            print("\n📱 Total user videos processed: \(fetchedVideos.count)")
             
+            await MainActor.run {
+                self.userVideos = fetchedVideos
+                print("💾 Updated user videos array. Current count: \(self.userVideos.count)")
+            }
         } catch {
             print("❌ Error fetching user videos: \(error)")
+            print("❌ Error description: \(error.localizedDescription)")
+            if let nsError = error as? NSError {
+                print("❌ Error domain: \(nsError.domain)")
+                print("❌ Error code: \(nsError.code)")
+            }
         }
     }
 }
