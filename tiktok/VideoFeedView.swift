@@ -193,7 +193,7 @@ struct VideoPlayerView: View {
         guard let url = videoUrl else {
             print("❌ No valid URL available")
             error = NSError(domain: "VideoPlayer", code: -1, 
-                          userInfo: [NSLocalizedDescriptionKey: "No valid video URL available"])
+                            userInfo: [NSLocalizedDescriptionKey: "No valid video URL available"])
             isLoading = false
             return
         }

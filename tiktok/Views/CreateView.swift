@@ -22,9 +22,9 @@ struct CreateView: View {
         ZStack {
             // Background gradient
             LinearGradient(gradient: Gradient(colors: gradientColors),
-                         startPoint: .topLeading,
-                         endPoint: .bottomTrailing)
-                .ignoresSafeArea()
+                           startPoint: .topLeading,
+                           endPoint: .bottomTrailing)
+            .ignoresSafeArea()
             
             VStack(spacing: 30) {
                 // Header with help button
@@ -50,7 +50,12 @@ struct CreateView: View {
                 
                 // Camera Option
                 Button(action: {
-                    showCamera = true
+                    let cameraLauncher = ShowVideoCamera()
+                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                       let rootViewController = windowScene.windows.first?.rootViewController {
+                        cameraLauncher.presentingViewController = rootViewController
+                        cameraLauncher.showCamera()
+                    }
                     increaseStreak()
                 }) {
                     VStack(spacing: 15) {
@@ -77,7 +82,7 @@ struct CreateView: View {
                     )
                     .scaleEffect(isAnimating ? 1.02 : 1)
                     .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true),
-                             value: isAnimating)
+                               value: isAnimating)
                 }
                 .padding(.horizontal)
                 
@@ -115,7 +120,7 @@ struct CreateView: View {
                     )
                     .scaleEffect(isAnimating ? 1.02 : 1)
                     .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true).delay(0.2),
-                             value: isAnimating)
+                               value: isAnimating)
                 }
                 .padding(.horizontal)
                 
