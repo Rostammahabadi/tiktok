@@ -1,17 +1,48 @@
 import Foundation
 import SwiftUI
 
-struct Video: Identifiable {
+struct Video: Identifiable, Codable {
     let id: String
     let title: String
     let description: String
     let authorId: String
     let videoURL: String
     let thumbnailURL: String?
-    var likes: Int
-    var views: Int
     let timestamp: Date
     var status: String
+    var isDeleted: Bool
+    
+    init(id: String = UUID().uuidString,
+         title: String,
+         description: String,
+         authorId: String,
+         videoURL: String,
+         thumbnailURL: String?,
+         timestamp: Date = Date(),
+         status: String = "",
+         isDeleted: Bool = false) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.authorId = authorId
+        self.videoURL = videoURL
+        self.thumbnailURL = thumbnailURL
+        self.timestamp = timestamp
+        self.status = status
+        self.isDeleted = isDeleted
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case description
+        case authorId
+        case videoURL
+        case thumbnailURL
+        case timestamp
+        case status
+        case isDeleted
+    }
     
     func loadThumbnail() async -> Image? {
         print("🖼️ Starting to load thumbnail...")

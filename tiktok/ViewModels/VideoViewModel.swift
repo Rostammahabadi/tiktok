@@ -19,8 +19,8 @@ class VideoViewModel: ObservableObject {
         
         do {
             print("📝 Querying Firestore collection 'videos'...")
-            // Remove the type filter to get all videos
             let snapshot = try await db.collection("videos")
+                .whereField("isDeleted", isEqualTo: false)
                 .order(by: "createdAt", descending: true)
                 .getDocuments()
             
@@ -75,7 +75,17 @@ class VideoViewModel: ObservableObject {
                         
                         guard let finalURL = videoURL else {
                             print("❌ No valid video URL found")
-                            return nil
+                            return Video(
+                                id: document.documentID,
+                                title: data["title"] as? String ?? "Video \(document.documentID.prefix(6))",
+                                description: data["description"] as? String ?? "Processing",
+                                authorId: data["authorId"] as? String ?? "unknown",
+                                videoURL: "",  // Empty string for invalid URL
+                                thumbnailURL: thumbnailURL,
+                                timestamp: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date(),
+                                status: "error", // Mark as error status
+                                isDeleted: false
+                            )
                         }
                         
                         print("✅ Final video URL: \(finalURL)")
@@ -89,10 +99,9 @@ class VideoViewModel: ObservableObject {
                             authorId: data["authorId"] as? String ?? "unknown",
                             videoURL: finalURL.absoluteString,
                             thumbnailURL: thumbnailURL,
-                            likes: data["likes"] as? Int ?? 0,
-                            views: data["views"] as? Int ?? 0,
                             timestamp: timestamp,
-                            status: status
+                            status: status,
+                            isDeleted: false
                         )
                     }
                 }
@@ -153,6 +162,7 @@ class VideoViewModel: ObservableObject {
             print("📝 Querying Firestore collection 'videos' for user: \(currentUserId)")
             let snapshot = try await db.collection("videos")
                 .whereField("authorId", isEqualTo: currentUserId)
+                .whereField("isDeleted", isEqualTo: false)
                 .order(by: "createdAt", descending: true)
                 .getDocuments()
             
@@ -205,7 +215,17 @@ class VideoViewModel: ObservableObject {
                         
                         guard let finalURL = videoURL else {
                             print("❌ No valid video URL found")
-                            return nil
+                            return Video(
+                                id: document.documentID,
+                                title: data["title"] as? String ?? "Video \(document.documentID.prefix(6))",
+                                description: data["description"] as? String ?? "Processing",
+                                authorId: data["authorId"] as? String ?? "unknown",
+                                videoURL: "",  // Empty string for invalid URL
+                                thumbnailURL: thumbnailURL,
+                                timestamp: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date(),
+                                status: "error", // Mark as error status
+                                isDeleted: false
+                            )
                         }
                         
                         print("✅ Final video URL: \(finalURL)")
@@ -219,10 +239,9 @@ class VideoViewModel: ObservableObject {
                             authorId: data["authorId"] as? String ?? "unknown",
                             videoURL: finalURL.absoluteString,
                             thumbnailURL: thumbnailURL,
-                            likes: data["likes"] as? Int ?? 0,
-                            views: data["views"] as? Int ?? 0,
                             timestamp: timestamp,
-                            status: status
+                            status: status,
+                            isDeleted: false
                         )
                     }
                 }
@@ -249,6 +268,24 @@ class VideoViewModel: ObservableObject {
                 print("❌ Error domain: \(nsError.domain)")
                 print("❌ Error code: \(nsError.code)")
             }
+        }
+    }
+    
+    func deleteVideo(_ video: Video) async {
+        print("🗑️ Attempting to delete video: \(video.id)")
+        
+        do {
+            // Update the video document to mark it as deleted
+            try await db.collection("videos").document(video.id).updateData([
+                "isDeleted": true
+            ])
+            
+            print("✅ Successfully marked video as deleted")
+            
+            // Refresh the videos list
+            await fetchUserVideos()
+        } catch {
+            print("❌ Error deleting video: \(error.localizedDescription)")
         }
     }
 }

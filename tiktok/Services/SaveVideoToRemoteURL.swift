@@ -65,8 +65,7 @@ class SaveVideoToRemoteURL: NSObject {
                             "authorId": userId,
                             "title": "Video \(videoId.prefix(6))",
                             "description": "Created on \(Date())",
-                            "likes": 0,
-                            "views": 0
+                            "isDeleted": false
                         ]
                         
                         print("💾 Saving to Firestore...")

@@ -98,9 +98,8 @@ class ShowVideoEditor: NSObject {
                 "createdAt": FieldValue.serverTimestamp(),
                 "title": "Video \(UUID().uuidString.prefix(6))",
                 "description": "Created on \(Date())",
-                "likes": 0,
-                "views": 0,
-                "status": "processing"
+                "status": "processing",
+                "isDeleted": false
             ] as [String : Any]
             
             // Upload without metadata parameter since it's not supported yet

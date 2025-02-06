@@ -53,7 +53,7 @@ struct TeacherProfileView: View {
                         } else {
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                                 ForEach(videoViewModel.userVideos) { video in
-                                    VideoThumbnail(video: video)
+                                    VideoThumbnail(video: video, videoViewModel: videoViewModel)
                                         .frame(maxWidth: .infinity)
                                         .onTapGesture {
                                             selectedVideo = video
@@ -120,9 +120,11 @@ struct TeacherProfileView: View {
 
 struct VideoThumbnail: View {
     let video: Video
+    let videoViewModel: VideoViewModel
     @State private var thumbnail: Image?
     @State private var isLoading = true
     @State private var loadError = false
+    @State private var showDeleteAlert = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -133,6 +135,18 @@ struct VideoThumbnail: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
                         .clipped()
+                        .overlay(alignment: .topTrailing) {
+                            // Delete button
+                            Button(action: {
+                                showDeleteAlert = true
+                            }) {
+                                Image(systemName: "trash.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                                    .background(Circle().fill(Color.black.opacity(0.5)))
+                                    .padding(8)
+                            }
+                        }
                 } else if isLoading {
                     ProgressView()
                         .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
@@ -168,10 +182,6 @@ struct VideoThumbnail: View {
                     .font(.caption)
                     .foregroundColor(.primary)
                     .lineLimit(1)
-                
-                Text("\(video.views) views")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
             }
             .padding(.horizontal, 4)
             .padding(.bottom, 4)
@@ -180,6 +190,16 @@ struct VideoThumbnail: View {
         .cornerRadius(8)
         .shadow(radius: 1, y: 1)
         .padding(.bottom, 4)
+        .alert("Delete Video", isPresented: $showDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                Task {
+                    await videoViewModel.deleteVideo(video)
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete this video? This action cannot be undone.")
+        }
         .task {
             isLoading = true
             loadError = false
