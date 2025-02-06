@@ -75,11 +75,11 @@ class ShowVideoEditor: NSObject {
         }
     }
 
-    func showVideoEditor() {
+    func showVideoEditor(with videoURL: URL) {
         saveVideoService.presentingViewController = self.presentingViewController
         
-        guard let url = Bundle.main.url(forResource: "Skater", withExtension: "mp4") else { return }
-        let video = VideoEditorSDK.Video(url: url)
+        // Create video from passed URL
+        let video = VideoEditorSDK.Video(url: videoURL)
         
         let configuration = Configuration { builder in
             // Configure the `OverlayToolController` which lets the user
@@ -95,6 +95,8 @@ class ShowVideoEditor: NSObject {
                 // since we applied this with the `initialOverlayIntensity`.
                 options.showOverlayIntensitySlider = false
             }
+            
+            builder.theme = .dynamic
         }
         
         var videoEditor = VideoEditorSwiftUIView(video: video, configuration: configuration)

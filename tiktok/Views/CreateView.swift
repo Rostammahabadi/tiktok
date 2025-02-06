@@ -11,6 +11,7 @@ struct CreateView: View {
     @State private var showAchievement = false
     @State private var achievementTitle = ""
     @State private var showHelp = false
+    @State private var pickerDelegate: ImagePickerDelegate?
     
     // Matching gradient colors from WelcomeView
     let gradientColors: [SwiftUICore.Color] = [
@@ -83,11 +84,37 @@ struct CreateView: View {
                 
                 // Studio Option
                 Button(action: {
+                    print("📱 Studio button tapped")
                     let editor = ShowVideoEditor()
                     if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                        let rootViewController = windowScene.windows.first?.rootViewController {
+                        print("🎯 Got root view controller")
                         editor.presentingViewController = rootViewController
-                        editor.showVideoEditor()
+                        
+                        // Create and configure image picker
+                        let picker = UIImagePickerController()
+                        picker.sourceType = .photoLibrary
+                        picker.mediaTypes = ["public.movie"]
+                        picker.videoQuality = .typeHigh
+                        
+                        // Store delegate in state
+                        pickerDelegate = ImagePickerDelegate(
+                            presentingVC: rootViewController,
+                            completion: { url in
+                                print("🎬 Picker completion called with URL: \(String(describing: url))")
+                                if let videoURL = url {
+                                    print("📹 Got video URL: \(videoURL)")
+                                    DispatchQueue.main.async {
+                                        editor.showVideoEditor(with: videoURL)
+                                    }
+                                }
+                            }
+                        )
+                        picker.delegate = pickerDelegate
+                        
+                        // Present picker
+                        print("📤 Presenting picker")
+                        rootViewController.present(picker, animated: true)
                     }
                     increaseStreak()
                 }) {
@@ -246,4 +273,41 @@ struct HelpItemView: View {
 
 #Preview {
     CreateView()
+}
+
+// Add this helper class at the bottom of the file
+class ImagePickerDelegate: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    let completion: (URL?) -> Void
+    weak var presentingVC: UIViewController?
+    
+    init(presentingVC: UIViewController, completion: @escaping (URL?) -> Void) {
+        print("🎯 ImagePickerDelegate initialized")
+        self.presentingVC = presentingVC
+        self.completion = completion
+        super.init()
+    }
+    
+    func imagePickerController(_ picker: UIImagePickerController,
+                             didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        print("📸 Image picker did finish picking")
+        if let videoURL = info[.mediaURL] as? URL {
+            print("✅ Got video URL in picker: \(videoURL)")
+            // Dismiss picker first
+            picker.dismiss(animated: true) { [weak self] in
+                print("🔄 Picker dismissed, calling completion")
+                // Then call completion with URL after dismissal
+                self?.completion(videoURL)
+            }
+        } else {
+            print("❌ No video URL found in picker info")
+            picker.dismiss(animated: true)
+            completion(nil)
+        }
+    }
+    
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        print("🚫 Picker cancelled")
+        picker.dismiss(animated: true)
+        completion(nil)
+    }
 }
