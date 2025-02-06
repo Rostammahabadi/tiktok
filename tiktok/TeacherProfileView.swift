@@ -248,22 +248,34 @@ struct VideoPlayerSheet: View {
             return
         }
         
-        let playerItem = AVPlayerItem(url: url)
-        let newPlayer = AVPlayer(playerItem: playerItem)
+        let asset = AVURLAsset(url: url)
         
-        // Observe when the item is ready to play
-        NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: playerItem, queue: .main) { _ in
-            newPlayer.seek(to: .zero)
-            newPlayer.play()
-        }
-        
-        self.player = newPlayer
-        
-        // Start playing when ready
-        playerItem.asset.loadValuesAsynchronously(forKeys: ["playable"]) {
-            DispatchQueue.main.async {
-                self.isLoading = false
-                newPlayer.play()
+        Task {
+            do {
+                // Load asset properties
+                try await asset.load(.tracks, .duration)
+                
+                // Create player item and set up player
+                let playerItem = AVPlayerItem(asset: asset)
+                let newPlayer = AVPlayer(playerItem: playerItem)
+                
+                // Observe when the item is ready to play
+                NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: playerItem, queue: .main) { _ in
+                    newPlayer.seek(to: .zero)
+                    newPlayer.play()
+                }
+                
+                await MainActor.run {
+                    self.player = newPlayer
+                    self.isLoading = false
+                    newPlayer.play()
+                }
+            } catch {
+                print("❌ Error setting up player: \(error.localizedDescription)")
+                await MainActor.run {
+                    self.error = error
+                    self.isLoading = false
+                }
             }
         }
     }

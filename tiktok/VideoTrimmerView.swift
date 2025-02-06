@@ -16,9 +16,9 @@ struct VideoTrimmerView: View {
     @State private var videoDescription = ""
     
     init(url: URL) {
-        self.asset = AVAsset(url: url)
+        self.asset = AVURLAsset(url: url)
         _player = State(initialValue: AVPlayer(url: url))
-        _endTime = State(initialValue: CMTimeGetSeconds(AVAsset(url: url).duration))
+        _endTime = State(initialValue: CMTimeGetSeconds(AVURLAsset(url: url).duration))
     }
     
     var body: some View {

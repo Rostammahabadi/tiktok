@@ -1,5 +1,5 @@
 import Foundation
-import FirebaseStorage
+@preconcurrency import FirebaseStorage
 import FirebaseFirestore
 import FirebaseAuth
 

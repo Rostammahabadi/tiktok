@@ -1,6 +1,7 @@
 import SwiftUI
 import AVKit
 import UIKit
+import VideoEditorSDK
 
 struct CreateView: View {
     // MARK: - Properties
@@ -12,7 +13,7 @@ struct CreateView: View {
     @State private var showHelp = false
     
     // Matching gradient colors from WelcomeView
-    let gradientColors: [Color] = [
+    let gradientColors: [SwiftUICore.Color] = [
         Color(red: 0.98, green: 0.4, blue: 0.4),   // Playful red
         Color(red: 0.98, green: 0.8, blue: 0.3),   // Warm yellow
         Color(red: 0.4, green: 0.8, blue: 0.98)    // Sky blue
@@ -50,13 +51,7 @@ struct CreateView: View {
                 
                 // Camera Option
                 Button(action: {
-                    let cameraLauncher = ShowVideoCamera()
-                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                       let rootViewController = windowScene.windows.first?.rootViewController {
-                        cameraLauncher.presentingViewController = rootViewController
-                        cameraLauncher.showCamera()
-                    }
-                    increaseStreak()
+                    showCamera = true
                 }) {
                     VStack(spacing: 15) {
                         ZStack {
@@ -137,7 +132,10 @@ struct CreateView: View {
             isAnimating = true
         }
         .fullScreenCover(isPresented: $showCamera) {
-            CameraView(streakCount: $streakCount)
+            VideoCameraSwiftUIView {
+                showCamera = false
+                increaseStreak()
+            }
         }
         .sheet(isPresented: $showHelp) {
             HelpView()
@@ -175,34 +173,6 @@ struct AchievementPopup: View {
             .background(Color.black.opacity(0.7))
             .cornerRadius(15)
             .padding()
-    }
-}
-
-struct CameraView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var streakCount: Int
-    
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            
-            VStack {
-                HStack {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .padding()
-                    }
-                    Spacer()
-                }
-                Spacer()
-            }
-            
-            // Camera implementation will go here
-            Text("Camera View")
-                .foregroundColor(.white)
-        }
     }
 }
 
