@@ -10,7 +10,6 @@ class VideoUploader: ObservableObject {
     
     private let storage = Storage.storage().reference()
     private let db = Firestore.firestore()
-    private let authService = AuthService.shared
     
     func uploadVideo(url: URL, title: String = "", description: String = "") async throws -> String {
         // Wait for auth

@@ -219,98 +219,111 @@ struct LoginView: View {
                         }
                     )
                 
-                VStack(spacing: 25) {
-                    // Animated welcome message
-                    VStack(spacing: 10) {
-                        Image(systemName: "graduationcap.fill")
-                            .font(.system(size: 40))
-                            .foregroundColor(.white)
-                            .scaleEffect(isAnimating ? 1.1 : 1.0)
-                            .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true),
-                                     value: isAnimating)
-                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                        
-                        Text("Welcome Back!")
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                            .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
-                    }
-                    .padding(.top, 20)
-                    
-                    // Login form with improved styling
-                    VStack(spacing: 20) {
-                        // Email field with icon
-                        HStack(spacing: 12) {
-                            Image(systemName: "envelope.fill")
+                ScrollView {
+                    VStack(spacing: 25) {
+                        // Animated welcome message
+                        VStack(spacing: 10) {
+                            Image(systemName: "graduationcap.fill")
+                                .font(.system(size: 40))
                                 .foregroundColor(.white)
-                                .font(.title3)
-                                .frame(width: 24)
-                            CustomTextField(placeholder: "Email", text: $email)
+                                .scaleEffect(isAnimating ? 1.1 : 1.0)
+                                .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true),
+                                         value: isAnimating)
+                                .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                            
+                            Text("Welcome Back!")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+                        }
+                        .padding(.top, 60) // Add more top padding to prevent content from being too high
+                        
+                        // Login form with improved styling
+                        VStack(spacing: 20) {
+                            // Email field with icon
+                            HStack(spacing: 12) {
+                                Image(systemName: "envelope.fill")
+                                    .foregroundColor(.white)
+                                    .font(.title3)
+                                    .frame(width: 24)
+                                CustomTextField(
+                                    placeholder: "Email",
+                                    text: $email,
+                                    contentType: .username
+                                )
                                 .focused($focusedField, equals: .email)
-                                .textContentType(.emailAddress)
                                 .keyboardType(.emailAddress)
-                        }
-                        
-                        // Password field with icon
-                        HStack(spacing: 12) {
-                            Image(systemName: "lock.fill")
-                                .foregroundColor(.white)
-                                .font(.title3)
-                                .frame(width: 24)
-                            CustomSecureField(placeholder: "Password", text: $password)
+                            }
+                            
+                            // Password field with icon
+                            HStack(spacing: 12) {
+                                Image(systemName: "lock.fill")
+                                    .foregroundColor(.white)
+                                    .font(.title3)
+                                    .frame(width: 24)
+                                CustomTextField(
+                                    placeholder: "Password",
+                                    text: $password,
+                                    contentType: .password,
+                                    isSecure: true
+                                )
                                 .focused($focusedField, equals: .password)
-                        }
-                        
-                        if let errorMessage = errorMessage {
-                            Text(errorMessage)
-                                .font(.caption)
-                                .foregroundColor(.white)
-                                .padding(.horizontal)
-                                .padding(.vertical, 8)
-                                .background(Color.red.opacity(0.3))
-                                .cornerRadius(8)
-                        }
-                        
-                        // Login button with animation
-                        Button(action: login) {
-                            ZStack {
-                                if isLoading {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.2, green: 0.2, blue: 0.3)))
-                                } else {
-                                    HStack {
-                                        Image(systemName: "arrow.right.circle.fill")
-                                            .font(.title3)
-                                        Text("Let's Go!")
-                                            .font(.headline)
+                            }
+                            
+                            if let errorMessage = errorMessage {
+                                Text(errorMessage)
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal)
+                                    .padding(.vertical, 8)
+                                    .background(Color.red.opacity(0.3))
+                                    .cornerRadius(8)
+                            }
+                            
+                            // Login button with animation
+                            Button(action: login) {
+                                ZStack {
+                                    if isLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.2, green: 0.2, blue: 0.3)))
+                                    } else {
+                                        HStack {
+                                            Image(systemName: "arrow.right.circle.fill")
+                                                .font(.title3)
+                                            Text("Let's Go!")
+                                                .font(.headline)
+                                        }
                                     }
                                 }
+                                .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.3))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(Color.white)
+                                .cornerRadius(25)
+                                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
                             }
-                            .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.3))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(Color.white)
-                            .cornerRadius(25)
-                            .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+                            .disabled(isLoading || email.isEmpty || password.isEmpty)
+                            .scaleEffect(isLoading ? 0.95 : 1.0)
+                            .animation(.easeInOut(duration: 0.2), value: isLoading)
+                            
+                            // Forgot Password button with improved styling
+                            Button(action: {
+                                // Implement "Forgot Password?" functionality
+                            }) {
+                                Text("Forgot Password?")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white)
+                                    .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
+                            }
+                            .padding(.top, 10)
                         }
-                        .disabled(isLoading || email.isEmpty || password.isEmpty)
-                        .scaleEffect(isLoading ? 0.95 : 1.0)
-                        .animation(.easeInOut(duration: 0.2), value: isLoading)
+                        .padding(.horizontal)
                         
-                        // Forgot Password button with improved styling
-                        Button(action: {
-                            // Implement "Forgot Password?" functionality
-                        }) {
-                            Text("Forgot Password?")
-                                .font(.subheadline)
-                                .foregroundColor(.white)
-                                .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
-                        }
-                        .padding(.top, 10)
+                        Spacer(minLength: 50) // Add minimum spacing at the bottom
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                 }
-                .padding(.horizontal, 20)
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -371,16 +384,29 @@ struct SignupView: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 20) {
-                    CustomTextField(placeholder: "Email", text: $email)
-                        .focused($focusedField, equals: .email)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
+                    CustomTextField(
+                        placeholder: "Email",
+                        text: $email,
+                        contentType: .username
+                    )
+                    .focused($focusedField, equals: .email)
+                    .keyboardType(.emailAddress)
                     
-                    CustomSecureField(placeholder: "Password", text: $password)
-                        .focused($focusedField, equals: .password)
+                    CustomTextField(
+                        placeholder: "Password",
+                        text: $password,
+                        contentType: .password,
+                        isSecure: true
+                    )
+                    .focused($focusedField, equals: .password)
                     
-                    CustomSecureField(placeholder: "Confirm Password", text: $confirmPassword)
-                        .focused($focusedField, equals: .confirmPassword)
+                    CustomTextField(
+                        placeholder: "Confirm Password",
+                        text: $confirmPassword,
+                        contentType: .password,
+                        isSecure: true
+                    )
+                    .focused($focusedField, equals: .confirmPassword)
                     
                     if let errorMessage = errorMessage {
                         Text(errorMessage)
@@ -458,6 +484,8 @@ struct SignupView: View {
 struct CustomTextField: View {
     var placeholder: String
     @Binding var text: String
+    var contentType: UITextContentType?
+    var isSecure: Bool = false
     
     var body: some View {
         ZStack(alignment: .leading) {
@@ -466,46 +494,40 @@ struct CustomTextField: View {
                     .foregroundColor(Color.white.opacity(0.7))
                     .padding(.horizontal, 16)
             }
-            TextField("", text: $text)
-                .padding()
-                .foregroundColor(.white)
-                .frame(height: 50)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.white.opacity(0.1))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                )
-                .autocapitalization(.none)
-        }
-    }
-}
-
-struct CustomSecureField: View {
-    var placeholder: String
-    @Binding var text: String
-    
-    var body: some View {
-        ZStack(alignment: .leading) {
-            if text.isEmpty {
-                Text(placeholder)
-                    .foregroundColor(Color.white.opacity(0.7))
-                    .padding(.horizontal, 16)
+            
+            if isSecure {
+                SecureField("", text: $text)
+                    .textContentType(contentType)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .padding()
+                    .foregroundColor(.white)
+                    .frame(height: 50)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.white.opacity(0.1))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                    )
+            } else {
+                TextField("", text: $text)
+                    .textContentType(contentType)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .padding()
+                    .foregroundColor(.white)
+                    .frame(height: 50)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.white.opacity(0.1))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                    )
             }
-            SecureField("", text: $text)
-                .padding()
-                .foregroundColor(.white)
-                .frame(height: 50)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.white.opacity(0.1))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                )
         }
     }
 }
