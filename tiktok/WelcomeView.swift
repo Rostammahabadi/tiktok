@@ -18,15 +18,18 @@ struct WelcomeView: View {
             
             VStack(spacing: 30) {
                 Spacer()
+                TeacherLogo()
+                    .frame(width: 70, height: 70) // Adjust the frame as needed
                 
-                Text("ReelAI")
+                
+                Text("TeacherTok")
                     .font(.system(size: 48, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .shadow(color: .black, radius: 2, x: 0, y: 2)
                 
-                Text("Create AI-powered educational content")
+                Text("A social platform for educators to share engaging content")
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(.gray)
+                    .foregroundColor(.white.opacity(0.85))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
                 
@@ -179,9 +182,10 @@ struct LoginView: View {
                     .foregroundColor(.white)
                 }
             }
-        }.onAppear{
-            isLoggedIn = true
         }
+         .onAppear{
+             isLoggedIn = true
+         }
     }
     
     // MARK: - Firebase Login Function
