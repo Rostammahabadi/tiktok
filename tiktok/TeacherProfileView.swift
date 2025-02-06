@@ -55,6 +55,7 @@ struct TeacherProfileView: View {
                                 ForEach(videoViewModel.userVideos) { video in
                                     VideoThumbnail(video: video, videoViewModel: videoViewModel)
                                         .frame(maxWidth: .infinity)
+                                        .contentShape(Rectangle()) // Explicitly define tap area
                                         .onTapGesture {
                                             selectedVideo = video
                                             isVideoPlayerPresented = true
@@ -146,6 +147,7 @@ struct VideoThumbnail: View {
                                     .background(Circle().fill(Color.black.opacity(0.5)))
                                     .padding(8)
                             }
+                            .zIndex(1) // Ensure delete button is above other content
                         }
                 } else if isLoading {
                     ProgressView()
@@ -189,7 +191,7 @@ struct VideoThumbnail: View {
         .background(Color(uiColor: .systemBackground))
         .cornerRadius(8)
         .shadow(radius: 1, y: 1)
-        .padding(.bottom, 4)
+        .padding(.vertical, 4) // Changed from .bottom to .vertical for consistent spacing
         .alert("Delete Video", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
