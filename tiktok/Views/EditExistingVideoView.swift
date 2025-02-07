@@ -51,7 +51,7 @@ struct EditExistingVideoView: UIViewControllerRepresentable {
                     
                     // Generate and upload thumbnail
                     print("🖼 Generating thumbnail")
-                    let thumbnail = try ThumbnailService.shared.generateThumbnail(from: result.output.url)
+                    let thumbnail = try await ThumbnailService.shared.generateThumbnail(from: result.output.url)
                     let thumbnailUrl = try await ThumbnailService.shared.uploadThumbnail(thumbnail, projectId: projectId)
                     print("✅ Thumbnail generated and uploaded")
                     

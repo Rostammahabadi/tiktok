@@ -86,13 +86,20 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                 do {
                     let db = Firestore.firestore()
                     
+                    // Get the current highest order number
+                    let snapshot = try await db.collection("videos")
+                        .whereField("author_id", isEqualTo: userId)
+                        .order(by: "order", descending: true)
+                        .limit(to: 1)
+                        .getDocuments()
+                    
                     // Create project first
                     let projectRef = db.collection("projects").document()
                     let projectId = projectRef.documentID
                     
                     // Generate and upload thumbnail
                     print("🖼 Generating thumbnail")
-                    let thumbnail = try ThumbnailService.shared.generateThumbnail(from: exportedUrl)
+                    let thumbnail = try await ThumbnailService.shared.generateThumbnail(from: exportedUrl)
                     let thumbnailUrl = try await ThumbnailService.shared.uploadThumbnail(thumbnail, projectId: projectId)
                     print("✅ Thumbnail generated and uploaded")
                     
@@ -138,6 +145,7 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                     
                     // Create video documents for each segment
                     let videosCollection = db.collection("videos")
+                    var order = 0
                     for segment in processedSegments {
                         // Create a new document for each segment
                         let videoRef = videosCollection.document()
@@ -148,9 +156,12 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                             "project_id": projectId,
                             "url": segment["url"] as! String,
                             "startTime": segment["startTime"] ?? NSNull(),
-                            "endTime": segment["endTime"] ?? NSNull()
-                        ])   
+                            "endTime": segment["endTime"] ?? NSNull(),
+                            "order": order,
+                            "is_deleted": false
+                        ])
                         print("✅ Created video document: \(videoRef.documentID)")
+                        order += 1
                     }
                     
                 } catch {

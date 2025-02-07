@@ -133,7 +133,9 @@ struct VideoPlayerView: View {
                         if !isUsingFallback, video.originalUrl != nil {
                             Button("Try Original Video") {
                                 isUsingFallback = true
-                                setupPlayer(useOriginal: true)
+                                Task {
+                                    await setupPlayer(useOriginal: true)
+                                }
                             }
                             .foregroundColor(.white)
                             .padding()
@@ -189,107 +191,55 @@ struct VideoPlayerView: View {
         }
         .onAppear {
             print("📱 VideoPlayerView appeared")
-            setupPlayer(useOriginal: false)
+            Task {
+                await setupPlayer(useOriginal: false)
+            }
         }
     }
     
-    private func setupPlayer(useOriginal: Bool) {
+    private func setupPlayer(useOriginal: Bool) async {
         // Clear previous state
         error = nil
         isLoading = true
         player?.pause()
         player = nil
-        playerItem = nil
-        observers.forEach { $0.invalidate() }
-        observers.removeAll()
         
-        // Determine which URL to use
-        let videoUrl: URL?
-        if useOriginal {
-            videoUrl = video.originalUrl
-            print("🎬 Using original video URL")
-        } else {
-            videoUrl = video.hlsUrl
-            print("🎬 Using HLS URL")
-        }
-        
-        guard let url = videoUrl else {
-            print("❌ No valid URL available")
-            error = NSError(domain: "VideoPlayer", code: -1, 
-                            userInfo: [NSLocalizedDescriptionKey: "No valid video URL available"])
-            isLoading = false
-            return
-        }
-        
-        print("🎬 Setting up player for URL: \(url)")
-        
-        let asset = AVAsset(url: url)
-        
-        Task {
-            do {
-                print("🔄 Loading asset properties...")
-                
-                // Load asset properties
-                try await asset.load(.tracks, .duration)
-                
-                let playerItem = AVPlayerItem(asset: asset)
-                let player = AVPlayer(playerItem: playerItem)
-                
-                // Observe player status
-                let statusObserver = player.observe(\.timeControlStatus) { player, _ in
-                    DispatchQueue.main.async {
-                        switch player.timeControlStatus {
-                        case .playing:
-                            isPlaying = true
-                        case .paused:
-                            isPlaying = false
-                        default:
-                            break
-                        }
-                    }
-                }
-                observers.append(statusObserver)
-                
-                // Set up error observation
-                let errorObserver = playerItem.observe(\.status) { item, _ in
-                    if item.status == .failed {
-                        print("❌ PlayerItem failed: \(String(describing: item.error))")
-                        error = item.error
-                        isLoading = false
-                    }
-                }
-                observers.append(errorObserver)
-                
-                // Configure player
-                player.actionAtItemEnd = .pause
-                player.isMuted = true
-                
-                // Update state
-                self.player = player
-                self.playerItem = playerItem
+        do {
+            let videoUrl = useOriginal ? video.originalUrl?.absoluteString : video.hlsUrl?.absoluteString
+            guard let url = URL(string: videoUrl ?? "") else {
+                throw NSError(domain: "VideoPlayer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
+            }
+            
+            let asset = AVURLAsset(url: url)
+            
+            // Load required asset properties asynchronously
+            try await asset.load(.tracks, .duration, .preferredTransform)
+            
+            let playerItem = AVPlayerItem(asset: asset)
+            let newPlayer = AVPlayer(playerItem: playerItem)
+            
+            await MainActor.run {
+                self.player = newPlayer
                 self.isLoading = false
-                
-                if isActive {
-                    print("▶️ Starting playback...")
-                    player.play()
-                }
-                
-                // Set up periodic time observer for debugging
-                let interval = CMTime(seconds: 1, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-                player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
-                    print("▶️ Playback time: \(time.seconds) seconds")
-                    if let error = playerItem.error {
-                        print("❌ PlayerItem error during playback: \(error.localizedDescription)")
-                    }
-                }
-                
-            } catch {
-                print("❌ Error setting up player: \(error.localizedDescription)")
-                if let assetError = error as? AVError {
-                    print("❌ AVError code: \(assetError.code.rawValue)")
-                }
+            }
+            
+            // Set up player
+            newPlayer.actionAtItemEnd = .none
+            newPlayer.play()
+            
+            // Add observer for playback ended
+            NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: playerItem,
+                queue: .main
+            ) { [weak newPlayer] _ in
+                newPlayer?.seek(to: .zero)
+                newPlayer?.play()
+            }
+        } catch {
+            await MainActor.run {
                 self.error = error
-                isLoading = false
+                self.isLoading = false
             }
         }
     }

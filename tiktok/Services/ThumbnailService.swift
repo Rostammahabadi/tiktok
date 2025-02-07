@@ -13,8 +13,12 @@ class ThumbnailService {
     /// Generate a thumbnail from the first frame of a video
     /// - Parameter videoURL: URL of the video
     /// - Returns: Generated UIImage
-    func generateThumbnail(from videoURL: URL) throws -> UIImage {
-        let asset = AVAsset(url: videoURL)
+    func generateThumbnail(from videoURL: URL) async throws -> UIImage {
+        let asset = AVURLAsset(url: videoURL)
+        
+        // Load asset properties asynchronously
+        try await asset.load(.tracks)
+        
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
         

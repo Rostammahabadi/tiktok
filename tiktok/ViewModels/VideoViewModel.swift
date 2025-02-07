@@ -22,6 +22,7 @@ class VideoViewModel: ObservableObject {
             print("📝 Querying Firestore collection 'videos'...")
             let snapshot = try await db.collection("videos")
                 .whereField("isDeleted", isEqualTo: false)
+                .order(by: "order", descending: false)
                 .getDocuments()
             
             print("📊 Found \(snapshot.documents.count) documents in Firestore")
@@ -35,7 +36,8 @@ class VideoViewModel: ObservableObject {
                     projectId: data["project_id"] as? String ?? "",
                     url: data["url"] as? String ?? "",
                     startTime: data["startTime"] as? Double,
-                    endTime: data["endTime"] as? Double
+                    endTime: data["endTime"] as? Double,
+                    order: data["order"] as? Int ?? 0
                 )
                 fetchedVideos.append(video)
             }

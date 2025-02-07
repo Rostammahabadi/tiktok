@@ -7,13 +7,21 @@ class ProjectViewModel: ObservableObject {
     @Published var isLoading = false
     
     func fetchProjects() async {
-        isLoading = true
-        defer { isLoading = false }
+        await MainActor.run {
+            isLoading = true
+        }
         
         do {
-            projects = try await ProjectService.shared.fetchUserProjects()
+            let fetchedProjects = try await ProjectService.shared.fetchUserProjects()
+            await MainActor.run {
+                self.projects = fetchedProjects
+                self.isLoading = false
+            }
         } catch {
             print("❌ Error fetching projects: \(error.localizedDescription)")
+            await MainActor.run {
+                self.isLoading = false
+            }
         }
     }
 }
@@ -22,78 +30,96 @@ struct TeacherProfileView: View {
     @State private var selectedTab = 0
     @Binding var isLoggedIn: Bool
     @StateObject private var projectViewModel = ProjectViewModel()
-    @State private var isLoading = false
     @State private var selectedProject: Project?
     @State private var selectedVideo: Video?
     @State private var isVideoPlayerPresented = false
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Profile header
-                    VStack {
-                        Image(systemName: "person.crop.circle.fill")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 100, height: 100)
-                            .foregroundColor(Theme.accentColor)
-                        
-                        Text("Jane Smith")
-                            .font(Theme.titleFont)
-                            .foregroundColor(Theme.accentColor)
-                        
-                        Text("Math Teacher | 10 years experience")
-                            .font(Theme.bodyFont)
-                            .foregroundColor(Theme.textColor.opacity(0.8))
-                    }
-                    .padding()
-                    
-                    // Tab view for projects, videos and about
-                    Picker("", selection: $selectedTab) {
-                        Text("Projects").tag(0)
-                        Text("About").tag(1)
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .padding(.horizontal)
-                    
-                    if selectedTab == 0 {
-                        // Projects grid
-                        if projectViewModel.isLoading {
-                            ProgressView()
-                                .scaleEffect(1.5)
-                                .padding()
-                        } else if projectViewModel.projects.isEmpty {
-                            Text("No projects yet")
-                                .foregroundColor(Theme.textColor.opacity(0.6))
-                                .padding()
-                        } else {
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                                ForEach(projectViewModel.projects) { project in
-                                    ProjectThumbnail(project: project)
-                                        .frame(maxWidth: .infinity)
-                                        .contentShape(Rectangle())
-                                }
-                            }
-                            .padding(.horizontal, 10)
-                        }
-                    } else {
-                        // About section
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("About Me")
-                                .font(Theme.headlineFont)
-                                .foregroundColor(Theme.textColor)
+            ZStack {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Profile header
+                        VStack {
+                            Image(systemName: "person.crop.circle.fill")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 100, height: 100)
+                                .foregroundColor(Theme.accentColor)
                             
-                            Text("I'm passionate about making math accessible and fun for all students. With 10 years of teaching experience, I specialize in creating engaging video content to supplement classroom learning.")
+                            Text("Jane Smith")
+                                .font(Theme.titleFont)
+                                .foregroundColor(Theme.accentColor)
+                            
+                            Text("Math Teacher | 10 years experience")
                                 .font(Theme.bodyFont)
                                 .foregroundColor(Theme.textColor.opacity(0.8))
                         }
+                        .padding()
+                        
+                        // Tab view for projects, videos and about
+                        Picker("", selection: $selectedTab) {
+                            Text("Projects").tag(0)
+                            Text("About").tag(1)
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
                         .padding(.horizontal)
+                        
+                        if selectedTab == 0 {
+                            // Projects grid
+                            LazyVGrid(columns: [
+                                GridItem(.flexible()),
+                                GridItem(.flexible())
+                            ], spacing: 16) {
+                                ForEach(projectViewModel.projects) { project in
+                                    ProjectThumbnail(project: project)
+                                        .onTapGesture {
+                                            selectedProject = project
+                                        }
+                                }
+                            }
+                            .padding(.horizontal)
+                        } else {
+                            // About section
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("About Me")
+                                    .font(Theme.headlineFont)
+                                    .foregroundColor(Theme.textColor)
+                                
+                                Text("I'm passionate about making math accessible and fun for all students. With 10 years of teaching experience, I specialize in creating engaging video content to supplement classroom learning.")
+                                    .font(Theme.bodyFont)
+                                    .foregroundColor(Theme.textColor.opacity(0.8))
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                }
+                .refreshable {
+                    await projectViewModel.fetchProjects()
+                }
+                
+                // Loading overlay
+                if projectViewModel.isLoading {
+                    ZStack {
+                        Color.black.opacity(0.4)
+                            .edgesIgnoringSafeArea(.all)
+                        
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(1.5)
+                            
+                            Text("Loading content...")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        }
+                        .padding(30)
+                        .background(Color(UIColor.systemBackground).opacity(0.8))
+                        .cornerRadius(10)
                     }
                 }
             }
-            .background(Theme.backgroundColor)
-            .navigationTitle("Profile")
+            .navigationBarTitle("Profile", displayMode: .inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: logout) {
@@ -102,12 +128,6 @@ struct TeacherProfileView: View {
                     }
                 }
             }
-            .task {
-                await projectViewModel.fetchProjects()
-            }
-            .refreshable {
-                await projectViewModel.fetchProjects()
-            }
             .sheet(isPresented: $isVideoPlayerPresented) {
                 if let video = selectedVideo {
                     VideoPlayerSheet(video: video)
@@ -115,6 +135,9 @@ struct TeacherProfileView: View {
                     // Add project player sheet here
                 }
             }
+        }
+        .task {
+            await projectViewModel.fetchProjects()
         }
     }
     
@@ -375,7 +398,6 @@ struct VideoThumbnail: View {
             async let videosTask = VideoViewModel.shared.fetchProjectVideos(projectId)
             
             let (project, videos) = try await (projectTask, videosTask)
-//            print("✅ Loaded project and \(videos.count) videos")
             
             await MainActor.run {
                 self.project = project

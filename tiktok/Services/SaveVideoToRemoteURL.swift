@@ -92,16 +92,46 @@ class SaveVideoToRemoteURL: NSObject {
     // Add thumbnail generation function
     private func generateThumbnail(from videoURL: URL) async throws -> Data? {
         let asset = AVURLAsset(url: videoURL)
+        
+        // Load required asset properties asynchronously
+        try await asset.load(.tracks)
+        
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
         
-        // Get thumbnail from first frame
-        let time = CMTime(seconds: 0, preferredTimescale: 1)
-        let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
-        let uiImage = UIImage(cgImage: cgImage)
+        // Get the first frame
+        let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
+        let thumbnail = UIImage(cgImage: cgImage)
         
-        // Convert to JPEG data with 0.8 quality
-        return uiImage.jpegData(compressionQuality: 0.8)
+        return thumbnail.jpegData(compressionQuality: 0.7)
+    }
+    
+    private func processVideo(from sourceURL: URL) async throws -> URL {
+        let asset = AVURLAsset(url: sourceURL)
+        
+        // Load required asset properties asynchronously
+        try await asset.load(.tracks, .duration)
+        
+        // Create export session
+        guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
+            throw NSError(domain: "SaveVideoToRemoteURL", code: -1, userInfo: [NSLocalizedDescriptionKey: "Could not create export session"])
+        }
+        
+        // Set up export
+        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).mp4")
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = .mp4
+        exportSession.shouldOptimizeForNetworkUse = true
+        
+        // Export video
+        await exportSession.export()
+        
+        guard exportSession.status == .completed else {
+            throw exportSession.error ?? NSError(domain: "SaveVideoToRemoteURL", code: -1, 
+                userInfo: [NSLocalizedDescriptionKey: "Export failed with status: \(exportSession.status.rawValue)"])
+        }
+        
+        return outputURL
     }
     
     func convertToHLS(filePath: String, videoId: String) {
@@ -209,32 +239,5 @@ class SaveVideoToRemoteURL: NSObject {
             
             task.resume()  // ✅ Ensuring network request runs
         }
-    }
-    
-    // Add this new method
-    private func processVideo(from sourceURL: URL) async throws -> URL {
-        let asset = AVAsset(url: sourceURL)
-        
-        // Create temp output URL
-        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).mp4")
-        
-        // Configure export session
-        let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality)
-        exportSession?.outputURL = outputURL
-        exportSession?.outputFileType = .mp4
-        exportSession?.shouldOptimizeForNetworkUse = true
-        
-        // Export the video
-        if let exportSession = exportSession {
-            await exportSession.export()
-            
-            if exportSession.status == .completed {
-                return outputURL
-            } else if let error = exportSession.error {
-                throw error
-            }
-        }
-        
-        throw NSError(domain: "VideoProcessing", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to process video"])
     }
 }
