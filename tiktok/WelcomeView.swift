@@ -456,26 +456,60 @@ struct SignupView: View {
     // MARK: - Firebase Signup Function
     
     func signup() {
+        print("📝 Starting signup process...")
         errorMessage = nil
         
         guard password == confirmPassword else {
-            errorMessage = "Passwords do not match."
+            let error = "Passwords do not match."
+            print("❌ Signup validation failed: \(error)")
+            errorMessage = error
             return
         }
         
+        print("📝 Attempting to create Firebase Auth user with email: \(email)")
         isLoading = true
         
-        Auth.auth().createUser(withEmail: email, password: password) { result, error in
-            isLoading = false
+        Auth.auth().createUser(withEmail: email, password: password) { [self] result, error in
             if let error = error {
-                print("Error creating user: \(error.localizedDescription)")
-                print("Error details: \(error)")
+                isLoading = false
+                print("❌ Firebase Auth creation failed")
+                print("❌ Error creating user: \(error.localizedDescription)")
+                print("❌ Error details: \(error)")
                 errorMessage = error.localizedDescription
                 return
             }
-            // Successfully signed up and logged in
-            isLoggedIn = true
-            dismiss()
+            
+            print("✅ Firebase Auth user created successfully")
+            
+            // Create user in Firestore
+            guard let result = result else {
+                isLoading = false
+                let error = "Failed to get authentication result"
+                print("❌ \(error)")
+                errorMessage = error
+                return
+            }
+            
+            print("📝 Starting Firestore user creation for Auth ID: \(result.user.uid)")
+            
+            Task {
+                do {
+                    try await UserService.shared.createUserAfterAuthentication(authResult: result, username: email)
+                    print("✅ Complete signup process successful")
+                    DispatchQueue.main.async {
+                        isLoading = false
+                        isLoggedIn = true
+                        dismiss()
+                    }
+                } catch {
+                    print("❌ Failed to create Firestore user")
+                    print("❌ Error details: \(error)")
+                    DispatchQueue.main.async {
+                        isLoading = false
+                        errorMessage = "Failed to create user profile: \(error.localizedDescription)"
+                    }
+                }
+            }
         }
     }
 }

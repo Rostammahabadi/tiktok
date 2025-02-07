@@ -7,10 +7,14 @@
 import Swift
 import SwiftUI
 import VideoEditorSDK
+import FirebaseCore
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // Initialize Firebase
+        FirebaseApp.configure()
+        
         // Initialize img.ly Video Editor SDK with license file
         if let licenseURL = Bundle.main.url(forResource: "license", withExtension: "") {
             VESDK.unlockWithLicense(at: licenseURL)
