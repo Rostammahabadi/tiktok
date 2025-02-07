@@ -52,8 +52,7 @@ struct TeacherProfileView: View {
                     // Tab view for projects, videos and about
                     Picker("", selection: $selectedTab) {
                         Text("Projects").tag(0)
-                        Text("Videos").tag(1)
-                        Text("About").tag(2)
+                        Text("About").tag(1)
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal)
@@ -82,10 +81,6 @@ struct TeacherProfileView: View {
                             }
                             .padding(.horizontal, 10)
                         }
-                    } else if selectedTab == 1 {
-                        // Videos grid
-                        VideoGridView()
-                            .padding(.horizontal, 10)
                     } else {
                         // About section
                         VStack(alignment: .leading, spacing: 10) {
@@ -170,6 +165,13 @@ struct ProjectThumbnail: View {
         .background(Theme.backgroundColor)
         .cornerRadius(10)
         .shadow(radius: 3)
+        .contextMenu {
+            Button {
+                // Edit action will be added later
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+        }
         .task {
             await loadThumbnail()
         }
@@ -272,6 +274,13 @@ struct VideoThumbnail: View {
                                     .padding(8)
                             }
                             .zIndex(1) // Ensure delete button is above other content
+                        }
+                        .contextMenu {
+                            Button {
+                                // Edit action will be added later
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
                         }
                 } else if isLoading {
                     ProgressView()
