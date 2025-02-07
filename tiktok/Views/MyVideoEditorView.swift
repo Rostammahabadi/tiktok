@@ -92,8 +92,8 @@ struct MyVideoEditorViewWrapper: View {
     var body: some View {
         ZStack {
             MyVideoEditorView(videoURL: videoURL,
-                            showBirdAnimation: $showBirdAnimation,
-                            isUploading: $isUploading)
+                              showBirdAnimation: $showBirdAnimation,
+                              isUploading: $isUploading)
             
             if showBirdAnimation {
                 GraduationBirdAnimation(isShowing: $showBirdAnimation) {

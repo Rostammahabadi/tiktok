@@ -154,48 +154,77 @@ struct TeacherProfileView: View {
 struct ProjectThumbnail: View {
     let project: Project
     @State private var thumbnailImage: UIImage?
-    @State private var isLoading = true
-    @State private var showEditView = false
     @State private var projectVideos: [Video]?
+    @State private var showEditView = false
+    @State private var isLoading = false
+    @State private var errorMessage: String?
     
     var body: some View {
         VStack {
-            if let thumbnailImage = thumbnailImage {
-                Image(uiImage: thumbnailImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 150)
-                    .clipped()
-            } else if isLoading {
-                ProgressView()
-                    .frame(height: 150)
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(height: 150)
-                    .overlay(
-                        Image(systemName: "photo")
-                            .foregroundColor(.gray)
-                    )
+            ZStack {
+                if let thumbnailImage = thumbnailImage {
+                    Image(uiImage: thumbnailImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 150, height: 150)
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.gray, lineWidth: 1)
+                        )
+                } else {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 150, height: 150)
+                        .overlay(
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                        )
+                }
+                
+                if isLoading {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.black.opacity(0.7))
+                        .frame(width: 150, height: 150)
+                        .overlay(
+                            VStack(spacing: 10) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                Text("Loading videos...")
+                                    .foregroundColor(.white)
+                                    .font(.caption)
+                            }
+                        )
+                }
+            }
+            .contextMenu {
+                Button {
+                    Task {
+                        await loadAndPrepareVideos()
+                    }
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
             }
             
             Text(project.title)
                 .font(.caption)
-                .lineLimit(1)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
         }
-        .contextMenu {
-            Button {
-                print("🖊️ Edit button tapped from context menu")
-                Task {
-                    await loadProjectVideos()
-                }
-            } label: {
-                Label("Edit", systemImage: "pencil")
-            }
-        }
-        .sheet(isPresented: $showEditView) {
+        .frame(width: 150)
+        .fullScreenCover(isPresented: $showEditView) {
             if let projectVideos = projectVideos {
                 EditExistingVideoView(videoURLs: projectVideos, project: project)
+            }
+        }
+        .alert("Error", isPresented: .constant(errorMessage != nil)) {
+            Button("OK") {
+                errorMessage = nil
+            }
+        } message: {
+            if let errorMessage = errorMessage {
+                Text(errorMessage)
             }
         }
         .task {
@@ -210,29 +239,57 @@ struct ProjectThumbnail: View {
                     print("❌ Error loading thumbnail: \(error)")
                 }
             }
-            isLoading = false
         }
     }
     
-    private func loadProjectVideos() async {
-        print("📝 Starting to load project videos...")
+    private func loadAndPrepareVideos() async {
+        isLoading = true
+        errorMessage = nil
+        
         do {
             guard let projectId = project.id else {
-                print("❌ No project ID found")
-                return
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No project ID found"])
             }
             
-            let videos = try await ProjectService.shared.fetchProjectVideos(projectId: projectId)
-            print("✅ Loaded \(videos.count) videos")
+            // 1. Fetch videos from Firestore
+            print("📝 Fetching videos for project: \(projectId)")
+            let remoteVideos = try await ProjectService.shared.fetchProjectVideos(projectId: projectId)
+            print("✅ Found \(remoteVideos.count) videos")
             
+            // 2. Download each video locally
+            var localVideos: [Video] = []
+            for var video in remoteVideos {
+                if let remoteURL = video.urlValue {
+                    print("⬇️ Downloading video: \(video.id)")
+                    let localURL = try await downloadVideo(remoteURL: remoteURL)
+                    video.url = localURL.absoluteString
+                    print("✅ Downloaded to: \(localURL.absoluteString)")
+                    localVideos.append(video)
+                }
+            }
+            
+            // 3. Update state and show editor
             await MainActor.run {
-                self.projectVideos = videos
+                self.projectVideos = localVideos
+                self.isLoading = false
                 self.showEditView = true
-                print("🎬 Showing edit view")
             }
+            
         } catch {
-            print("❌ Error loading project videos: \(error)")
+            await MainActor.run {
+                self.isLoading = false
+                self.errorMessage = error.localizedDescription
+                print("❌ Error: \(error)")
+            }
         }
+    }
+    
+    private func downloadVideo(remoteURL: URL) async throws -> URL {
+        let (data, _) = try await URLSession.shared.data(from: remoteURL)
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".mp4")
+        try data.write(to: tempURL)
+        return tempURL
     }
 }
 
@@ -380,7 +437,7 @@ struct VideoThumbnail: View {
         } message: {
             Text(errorMessage ?? "An unknown error occurred")
         }
-        .sheet(isPresented: $showEditView) {
+        .fullScreenCover(isPresented: $showEditView) {
             if let projectVideos = projectVideos, let project = project {
                 EditExistingVideoView(videoURLs: projectVideos, project: project)
             }

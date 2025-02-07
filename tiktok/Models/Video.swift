@@ -5,7 +5,7 @@ struct Video: Identifiable, Codable {
     let id: String
     let authorId: String
     let projectId: String
-    let url: String
+    var url: String
     let storagePath: String
     let startTime: Double?
     let endTime: Double?
