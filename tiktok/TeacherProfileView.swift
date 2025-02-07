@@ -2,11 +2,28 @@ import SwiftUI
 import FirebaseAuth
 import AVKit
 
+class ProjectViewModel: ObservableObject {
+    @Published var projects: [Project] = []
+    @Published var isLoading = false
+    
+    func fetchProjects() async {
+        isLoading = true
+        defer { isLoading = false }
+        
+        do {
+            projects = try await ProjectService.shared.fetchUserProjects()
+        } catch {
+            print("❌ Error fetching projects: \(error.localizedDescription)")
+        }
+    }
+}
+
 struct TeacherProfileView: View {
     @State private var selectedTab = 0
     @Binding var isLoggedIn: Bool
-    @StateObject private var videoViewModel = VideoViewModel()
+    @StateObject private var projectViewModel = ProjectViewModel()
     @State private var isLoading = false
+    @State private var selectedProject: Project?
     @State private var selectedVideo: Video?
     @State private var isVideoPlayerPresented = false
     
@@ -32,38 +49,43 @@ struct TeacherProfileView: View {
                     }
                     .padding()
                     
-                    // Tab view for videos and about
+                    // Tab view for projects, videos and about
                     Picker("", selection: $selectedTab) {
-                        Text("Videos").tag(0)
-                        Text("About").tag(1)
+                        Text("Projects").tag(0)
+                        Text("Videos").tag(1)
+                        Text("About").tag(2)
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal)
                     
                     if selectedTab == 0 {
-                        // Videos grid
-                        if videoViewModel.isLoading {
+                        // Projects grid
+                        if projectViewModel.isLoading {
                             ProgressView()
                                 .scaleEffect(1.5)
                                 .padding()
-                        } else if videoViewModel.userVideos.isEmpty {
-                            Text("No videos yet")
+                        } else if projectViewModel.projects.isEmpty {
+                            Text("No projects yet")
                                 .foregroundColor(Theme.textColor.opacity(0.6))
                                 .padding()
                         } else {
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                                ForEach(videoViewModel.userVideos) { video in
-                                    VideoThumbnail(video: video, videoViewModel: videoViewModel)
+                                ForEach(projectViewModel.projects) { project in
+                                    ProjectThumbnail(project: project)
                                         .frame(maxWidth: .infinity)
-                                        .contentShape(Rectangle()) // Explicitly define tap area
+                                        .contentShape(Rectangle())
                                         .onTapGesture {
-                                            selectedVideo = video
+                                            selectedProject = project
                                             isVideoPlayerPresented = true
                                         }
                                 }
                             }
                             .padding(.horizontal, 10)
                         }
+                    } else if selectedTab == 1 {
+                        // Videos grid
+                        VideoGridView()
+                            .padding(.horizontal, 10)
                     } else {
                         // About section
                         VStack(alignment: .leading, spacing: 10) {
@@ -90,13 +112,17 @@ struct TeacherProfileView: View {
                 }
             }
             .task {
-                await videoViewModel.fetchUserVideos()
+                await projectViewModel.fetchProjects()
             }
             .refreshable {
-                await videoViewModel.fetchUserVideos()
+                await projectViewModel.fetchProjects()
             }
             .sheet(isPresented: $isVideoPlayerPresented) {
-                videoPlayerSheet
+                if let video = selectedVideo {
+                    VideoPlayerSheet(video: video)
+                } else if let project = selectedProject {
+                    // Add project player sheet here
+                }
             }
         }
     }
@@ -106,12 +132,110 @@ struct TeacherProfileView: View {
             try Auth.auth().signOut()
             isLoggedIn = false
         } catch {
-            print("Error signing out: \(error.localizedDescription)")
+            print("❌ Error signing out: \(error.localizedDescription)")
+        }
+    }
+}
+
+struct ProjectThumbnail: View {
+    let project: Project
+    @State private var thumbnailImage: UIImage?
+    @State private var isLoading = true
+    
+    var body: some View {
+        VStack {
+            if let thumbnailImage = thumbnailImage {
+                Image(uiImage: thumbnailImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 150)
+                    .clipped()
+            } else if isLoading {
+                ProgressView()
+                    .frame(height: 150)
+            } else {
+                Image(systemName: "video.fill")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 150)
+                    .foregroundColor(Theme.accentColor.opacity(0.5))
+            }
+            
+            Text(project.title)
+                .font(Theme.bodyFont)
+                .foregroundColor(Theme.textColor)
+                .lineLimit(1)
+                .padding(.vertical, 5)
+        }
+        .background(Theme.backgroundColor)
+        .cornerRadius(10)
+        .shadow(radius: 3)
+        .task {
+            await loadThumbnail()
         }
     }
     
-    var videoPlayerSheet: some View {
-        Group {
+    private func loadThumbnail() async {
+        guard let thumbnailUrlString = project.thumbnailUrl,
+              let thumbnailUrl = URL(string: thumbnailUrlString) else {
+            isLoading = false
+            return
+        }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: thumbnailUrl)
+            if let image = UIImage(data: data) {
+                await MainActor.run {
+                    thumbnailImage = image
+                }
+            }
+        } catch {
+            print("❌ Error loading thumbnail: \(error.localizedDescription)")
+        }
+        
+        await MainActor.run {
+            isLoading = false
+        }
+    }
+}
+
+struct VideoGridView: View {
+    @StateObject private var videoViewModel = VideoViewModel()
+    @State private var selectedVideo: Video?
+    @State private var isVideoPlayerPresented = false
+    
+    var body: some View {
+        VStack {
+            if videoViewModel.isLoading {
+                ProgressView()
+                    .scaleEffect(1.5)
+                    .padding()
+            } else if videoViewModel.userVideos.isEmpty {
+                Text("No videos yet")
+                    .foregroundColor(Theme.textColor.opacity(0.6))
+                    .padding()
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    ForEach(videoViewModel.userVideos) { video in
+                        VideoThumbnail(video: video, videoViewModel: videoViewModel)
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selectedVideo = video
+                                isVideoPlayerPresented = true
+                            }
+                    }
+                }
+                .padding(.horizontal, 10)
+            }
+        }
+        .task {
+            await videoViewModel.fetchUserVideos()
+        }
+        .refreshable {
+            await videoViewModel.fetchUserVideos()
+        }
+        .sheet(isPresented: $isVideoPlayerPresented) {
             if let video = selectedVideo {
                 VideoPlayerSheet(video: video)
             }

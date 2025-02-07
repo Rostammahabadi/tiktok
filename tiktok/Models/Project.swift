@@ -6,6 +6,7 @@ struct Project: Identifiable, Codable {
     let authorId: String
     let title: String
     let description: String?
+    let thumbnailUrl: String?
     let status: ProjectStatus
     @ServerTimestamp var createdAt: Timestamp?
     
@@ -20,14 +21,20 @@ struct Project: Identifiable, Codable {
         case authorId = "author_id"
         case title
         case description
+        case thumbnailUrl = "thumbnail_url"
         case status
         case createdAt = "created_at"
     }
     
-    init(authorId: String, title: String, description: String?, status: ProjectStatus) {
+    init(id: String? = nil, authorId: String, title: String, description: String? = nil, thumbnailUrl: String? = nil, status: ProjectStatus, createdAt: Date? = nil) {
+        self.id = id
         self.authorId = authorId
         self.title = title
         self.description = description
+        self.thumbnailUrl = thumbnailUrl
         self.status = status
+        if let createdAt = createdAt {
+            self.createdAt = Timestamp(date: createdAt)
+        }
     }
 }

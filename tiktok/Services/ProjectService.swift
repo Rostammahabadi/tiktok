@@ -11,7 +11,7 @@ class ProjectService {
     
     // MARK: - Create
     
-    func createProject(title: String, description: String? = nil) async throws -> Project {
+    func createProject(title: String, description: String? = nil, thumbnailUrl: String? = nil) async throws -> Project {
         guard let userId = Auth.auth().currentUser?.uid else {
             print("❌ Cannot create project: User not authenticated")
             throw NSError(domain: "ProjectService", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
@@ -19,17 +19,19 @@ class ProjectService {
         
         print("📝 Creating project with title: \(title)")
         
+        // Generate a new document ID
+        let docRef = db.collection(projectsCollection).document()
+        
         let project = Project(
+            id: docRef.documentID,
             authorId: userId,
             title: title,
             description: description,
+            thumbnailUrl: thumbnailUrl,
             status: .created
         )
         
         do {
-            // Generate a new document ID
-            let docRef = db.collection(projectsCollection).document()
-            
             // Create a dictionary with the project data
             var data: [String: Any] = [
                 "author_id": userId,
@@ -41,13 +43,16 @@ class ProjectService {
                 data["description"] = description
             }
             
+            if let thumbnailUrl = thumbnailUrl {
+                data["thumbnail_url"] = thumbnailUrl
+            }
+            
             // Set the data with merge to allow server timestamp
             try await docRef.setData(data, merge: true)
             
-            var savedProject = project
-            savedProject.id = docRef.documentID
-            print("✅ Project created successfully with ID: \(docRef.documentID)")
-            return savedProject
+            print("✅ Project created successfully")
+            print("✅ Document ID: \(docRef.documentID)")
+            return project
         } catch {
             print("❌ Failed to create project: \(error.localizedDescription)")
             throw error
@@ -69,6 +74,44 @@ class ProjectService {
         
         print("✅ Successfully retrieved project")
         return project
+    }
+    
+    /// Fetch all projects for the current user
+    /// - Returns: Array of projects
+    func fetchUserProjects() async throws -> [Project] {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            print("❌ Cannot fetch projects: User not authenticated")
+            throw NSError(domain: "ProjectService", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        print("📥 Fetching projects for user: \(userId)")
+        
+        do {
+            let snapshot = try await db.collection(projectsCollection)
+                .whereField("author_id", isEqualTo: userId)
+                .order(by: "created_at", descending: true)
+                .getDocuments()
+            
+            let projects = snapshot.documents.compactMap { document -> Project? in
+                let data = document.data()
+                
+                return Project(
+                    id: document.documentID,
+                    authorId: data["author_id"] as? String ?? "",
+                    title: data["title"] as? String ?? "",
+                    description: data["description"] as? String,
+                    thumbnailUrl: data["thumbnail_url"] as? String,
+                    status: Project.ProjectStatus(rawValue: data["status"] as? String ?? "") ?? .created,
+                    createdAt: (data["created_at"] as? Timestamp)?.dateValue()
+                )
+            }
+            
+            print("✅ Fetched \(projects.count) projects")
+            return projects
+        } catch {
+            print("❌ Failed to fetch projects: \(error.localizedDescription)")
+            throw error
+        }
     }
     
     func getUserProjects() async throws -> [Project] {
