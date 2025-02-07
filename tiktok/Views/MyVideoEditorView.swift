@@ -70,23 +70,20 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
             let db = Firestore.firestore()
             
             // 2) Create a "project" doc
-            let projectRef = db.collection("users")
-                .document(userId)
-                .collection("projects")
-                .document() // auto-ID
+            let projectRef = db.collection("projects").document()
             let projectId = projectRef.documentID
             
             // 3) Basic metadata for the project
-            let projectData: [String: Any] = [
-                "authorId": userId,
-                "createdAt": FieldValue.serverTimestamp(),
+            let project: [String: Any] = [
+                "author_id": userId,
                 "title": "Video Project",
                 "description": "User's video creation",
-                "status": "created"
+                "status": "created",
+                "created_at": FieldValue.serverTimestamp()
             ]
             
             // 4) Save the project
-            projectRef.setData(projectData) { error in
+            projectRef.setData(project) { error in
                 if let error = error {
                     print("❌ Error creating project doc: \(error.localizedDescription)")
                     return
@@ -94,7 +91,7 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                 print("✅ Created project \(projectId)")
                 
                 // 5) Once the project doc is created, save the final video + serialization
-                self.saveVideoData(for: videoEditViewController, result: result, in: projectRef)
+                self.saveVideoData(for: videoEditViewController, result: result, in: projectId, db: db)
             }
         }
         
@@ -114,9 +111,10 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
         
         private func saveVideoData(for videoEditViewController: ImglyKit.VideoEditViewController,
                                    result: ImglyKit.VideoEditorResult,
-                                   in projectRef: DocumentReference) {
+                                   in projectId: String,
+                                   db: Firestore) {
             // 1) Get the final exported video URL
-            let exportedURL = result.output.url
+            let exportedUrl = result.output.url
             
             // 2) Serialize the editor settings
             guard let serializedData = videoEditViewController.serializedSettings else {
@@ -125,7 +123,7 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
             }
             
             // Convert to Dictionary
-            guard let serializationDict = try? JSONSerialization.jsonObject(with: serializedData, options: []) as? [String: Any] else {
+            guard let serialization = try? JSONSerialization.jsonObject(with: serializedData, options: []) as? [String: Any] else {
                 print("⚠️ Could not parse serializedSettings.")
                 return
             }
@@ -140,22 +138,27 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                 ]
             }
             
-            // 4) Build videoData for Firestore
-            let videosRef = projectRef.collection("videos").document()
-            let videoData: [String: Any] = [
-                "exportedFilePath": exportedURL.absoluteString,
-                "serialization": serializationDict,
+            // 4) Create a "video" doc
+            let videoRef = db.collection("videos").document()
+            let videoId = videoRef.documentID
+            
+            // 5) Video data
+            let video: [String: Any] = [
+                "author_id": Auth.auth().currentUser?.uid,
+                "project_id": projectId,
+                "exported_file_path": exportedUrl.absoluteString,
                 "segments": segments,
-                "savedAt": FieldValue.serverTimestamp()
+                "serialization": serialization,
+                "saved_at": FieldValue.serverTimestamp()
             ]
             
-            // 5) Save in subcollection "videos"
-            videosRef.setData(videoData) { error in
+            // 6) Save in top-level collection "videos"
+            videoRef.setData(video) { error in
                 if let error = error {
                     print("❌ Error saving video data: \(error.localizedDescription)")
                     return
                 }
-                print("✅ Video data saved for project \(projectRef.documentID)")
+                print("✅ Video data saved for project \(projectId)")
             }
         }
     }
