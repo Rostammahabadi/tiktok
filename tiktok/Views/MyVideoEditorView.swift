@@ -54,133 +54,23 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
             parent.showBirdAnimation = true
             parent.isUploading = true
             
-            // 1) Basic Auth check
-            guard let userId = Auth.auth().currentUser?.uid else {
-                print("❌ No authenticated user.")
-                parent.showBirdAnimation = false
-                parent.isUploading = false
-                videoEditViewController.dismiss(animated: true)
-                return
-            }
-            
-            // 1) Get all the video URLs we need to process
-            let exportedUrl = result.output.url
-            var segmentUrls: [(URL, [String: Any])] = []
-            
-            for segment in result.task.video.segments {
-                segmentUrls.append((
-                    segment.url,
-                    [
-                        "startTime": segment.startTime ?? NSNull(),
-                        "endTime": segment.endTime ?? NSNull()
-                    ]
-                ))
-            }
-            
-            // 2) Process all videos while they're still in temp directory
+            // Get serialization data
             Task {
-                do {
-                    let db = Firestore.firestore()
-                    
-                    // Get the current highest order number
-                    let snapshot = try await db.collection("videos")
-                        .whereField("author_id", isEqualTo: userId)
-                        .order(by: "order", descending: true)
-                        .limit(to: 1)
-                        .getDocuments()
-                    
-                    // Create project first
-                    let projectRef = db.collection("projects").document()
-                    let projectId = projectRef.documentID
-                    
-                    // Generate and upload thumbnail
-                    print("🖼 Generating thumbnail")
-                    let thumbnail = try await ThumbnailService.shared.generateThumbnail(from: result.output.url)
-                    let thumbnailUrl = try await ThumbnailService.shared.uploadThumbnail(thumbnail, projectId: projectId)
-                    print("✅ Thumbnail generated and uploaded")
-                    
-                    // Upload each segment
-                    var processedSegments: [[String: Any]] = []
-                    
-                    for segment in result.task.video.segments {
-                        print("📤 Uploading segment")
-                        let segmentStorageUrl = try await StorageService.shared.uploadVideo(from: segment.url, projectId: projectId)
-                        
-                        var segmentData: [String: Any] = [
-                            "url": segmentStorageUrl.absoluteString
-                        ]
-                        
-                        if let startTime = segment.startTime {
-                            segmentData["startTime"] = startTime
-                        }
-                        
-                        if let endTime = segment.endTime {
-                            segmentData["endTime"] = endTime
-                        }
-                        
-                        processedSegments.append(segmentData)
-                    }
-                    
-                    // Get serialization data
-                    guard let serializedData = videoEditViewController.serializedSettings,
-                          let serialization = try? JSONSerialization.jsonObject(with: serializedData, options: []) as? [String: Any] else {
-                        print("⚠️ Could not serialize editor settings")
-                        parent.showBirdAnimation = false
-                        parent.isUploading = false
-                        videoEditViewController.dismiss(animated: true)
-                        return
-                    }
-                    
-                    guard !processedSegments.isEmpty else {
-                        print("❌ No segments to process")
-                        parent.showBirdAnimation = false
-                        parent.isUploading = false
-                        videoEditViewController.dismiss(animated: true)
-                        return
-                    }
-                    
-                    // Create project document with all URLs
-                    let project: [String: Any] = [
-                        "author_id": userId,
-                        "created_at": FieldValue.serverTimestamp(),
-                        "thumbnail_url": thumbnailUrl.absoluteString,
-                        "original_urls": parent.videoURL.absoluteString,
-                        "serialization": serialization,
-                    ]
-                    
-                    try await projectRef.setData(project)
-                    print("✅ Created project \(projectId)")
-                    
-                    // Create video documents
-                    let videosCollection = db.collection("videos")
-                    var order = 0
-                    for segment in processedSegments {
-                        let videoRef = videosCollection.document()
-                        print("📝 Creating video document: \(videoRef.documentID)")
-                        
-                        try await videoRef.setData([
-                            "author_id": userId,
-                            "project_id": projectId,
-                            "url": segment["url"] as! String,
-                            "startTime": segment["startTime"] ?? NSNull(),
-                            "endTime": segment["endTime"] ?? NSNull(),
-                            "order": order,
-                            "is_deleted": false
-                        ])
-                        print("✅ Created video document: \(videoRef.documentID)")
-                        order += 1
-                    }
-                    
-                    // All done - dismiss after a short delay to show completion
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                        self.parent.isUploading = false
-                        videoEditViewController.dismiss(animated: true)
-                    }
-                    
-                } catch {
-                    print("❌ Error processing video: \(error.localizedDescription)")
-                    parent.showBirdAnimation = false
-                    parent.isUploading = false
+                let serializedData = await videoEditViewController.serializedSettings
+                
+                // Instantiate the helper
+                let saver = SaveVideoToRemoteURL()
+                print("✅ Serialization data: \(serializedData)")
+                // Kick off the entire upload + project creation + HLS flow
+                saver.uploadEditedVideoWithSegments(
+                    mainVideoURL: result.output.url,
+                    result: result,
+                    serializedData: serializedData
+                )
+                
+                // Dismiss after a short delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    self.parent.isUploading = false
                     videoEditViewController.dismiss(animated: true)
                 }
             }
