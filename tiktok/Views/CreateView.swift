@@ -159,10 +159,10 @@ struct CreateView: View {
             isAnimating = true
         }
         .fullScreenCover(isPresented: $showCamera) {
-            VideoCameraSwiftUIView {
-                showCamera = false
-                increaseStreak()
-            }
+             VideoCameraSwiftUIView {
+                 showCamera = false
+                 increaseStreak()
+             }
         }
         .sheet(isPresented: $showHelp) {
             HelpView()

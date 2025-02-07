@@ -26,6 +26,7 @@ private extension UIImage {
     }
 }
 
+
 class ShowVideoEditor: NSObject {
     weak var presentingViewController: UIViewController?
     // Keep a strong reference to saveVideoService
