@@ -73,10 +73,6 @@ struct TeacherProfileView: View {
                                     ProjectThumbnail(project: project)
                                         .frame(maxWidth: .infinity)
                                         .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            selectedProject = project
-                                            isVideoPlayerPresented = true
-                                        }
                                 }
                             }
                             .padding(.horizontal, 10)
@@ -136,6 +132,8 @@ struct ProjectThumbnail: View {
     let project: Project
     @State private var thumbnailImage: UIImage?
     @State private var isLoading = true
+    @State private var showEditView = false
+    @State private var projectVideos: [Video]?
     
     var body: some View {
         VStack {
@@ -149,53 +147,114 @@ struct ProjectThumbnail: View {
                 ProgressView()
                     .frame(height: 150)
             } else {
-                Image(systemName: "video.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
                     .frame(height: 150)
-                    .foregroundColor(Theme.accentColor.opacity(0.5))
+                    .overlay(
+                        Image(systemName: "photo")
+                            .foregroundColor(.gray)
+                    )
             }
             
             Text(project.title)
-                .font(Theme.bodyFont)
-                .foregroundColor(Theme.textColor)
+                .font(.caption)
                 .lineLimit(1)
-                .padding(.vertical, 5)
         }
-        .background(Theme.backgroundColor)
-        .cornerRadius(10)
-        .shadow(radius: 3)
         .contextMenu {
             Button {
-                // Edit action will be added later
+                print("🖊️ Edit button tapped from context menu")
+                Task {
+                    await loadProjectVideos()
+                }
             } label: {
                 Label("Edit", systemImage: "pencil")
             }
         }
+        .sheet(isPresented: $showEditView) {
+            if let projectVideos = projectVideos {
+                EditExistingVideoView(videoURLs: projectVideos, project: project)
+            }
+        }
         .task {
-            await loadThumbnail()
+            if let thumbnailUrl = project.thumbnailUrl,
+               let url = URL(string: thumbnailUrl) {
+                do {
+                    let (data, _) = try await URLSession.shared.data(from: url)
+                    if let image = UIImage(data: data) {
+                        thumbnailImage = image
+                    }
+                } catch {
+                    print("❌ Error loading thumbnail: \(error)")
+                }
+            }
+            isLoading = false
         }
     }
     
-    private func loadThumbnail() async {
-        guard let thumbnailUrlString = project.thumbnailUrl,
-              let thumbnailUrl = URL(string: thumbnailUrlString) else {
-            isLoading = false
-            return
-        }
-        
+    private func loadProjectVideos() async {
+        print("📝 Starting to load project videos...")
         do {
-            let (data, _) = try await URLSession.shared.data(from: thumbnailUrl)
-            if let image = UIImage(data: data) {
-                await MainActor.run {
-                    thumbnailImage = image
-                }
+            guard let projectId = project.id else {
+                print("❌ No project ID found")
+                return
+            }
+            
+            let videos = try await ProjectService.shared.fetchProjectVideos(projectId: projectId)
+            print("✅ Loaded \(videos.count) videos")
+            
+            await MainActor.run {
+                self.projectVideos = videos
+                self.showEditView = true
+                print("🎬 Showing edit view")
             }
         } catch {
-            print("❌ Error loading thumbnail: \(error.localizedDescription)")
+            print("❌ Error loading project videos: \(error)")
         }
-        
-        await MainActor.run {
+    }
+}
+
+struct ProjectVideosView: View {
+    let project: Project
+    @StateObject private var videoViewModel = VideoViewModel()
+    @Environment(\.presentationMode) var presentationMode
+    @State private var isLoading = true
+    
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                } else if videoViewModel.projectVideos.isEmpty {
+                    Text("No videos in this project")
+                        .foregroundColor(.gray)
+                } else {
+                    ScrollView {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            ForEach(videoViewModel.projectVideos) { video in
+                                VideoThumbnail(video: video, videoViewModel: videoViewModel)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                    }
+                }
+            }
+            .navigationTitle(project.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
+        }
+        .task {
+            isLoading = true
+            print("🎬 Loading videos for project: \(project.id ?? "unknown")")
+            if let projectId = project.id {
+                await videoViewModel.fetchProjectVideos(projectId)
+            }
             isLoading = false
         }
     }
@@ -252,98 +311,83 @@ struct VideoThumbnail: View {
     @State private var isLoading = true
     @State private var loadError = false
     @State private var showDeleteAlert = false
+    @State private var showEditView = false
+    @State private var projectVideos: [Video]?
+    @State private var project: Project?
+    @State private var errorMessage: String?
+    @State private var showError = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ZStack {
-                if let thumbnail = thumbnail {
-                    thumbnail
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
-                        .clipped()
-                        .overlay(alignment: .topTrailing) {
-                            // Delete button
-                            Button(action: {
-                                showDeleteAlert = true
-                            }) {
-                                Image(systemName: "trash.circle.fill")
-                                    .font(.title2)
-                                    .foregroundColor(.white)
-                                    .background(Circle().fill(Color.black.opacity(0.5)))
-                                    .padding(8)
+        ZStack {
+            if let thumbnail = thumbnail {
+                thumbnail
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
+                    .clipped()
+                    .contextMenu {
+                        Button {
+                            Task {
+                                print("🖊️ Edit button tapped")
+                                await loadProjectAndVideos()
                             }
-                            .zIndex(1) // Ensure delete button is above other content
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
                         }
-                        .contextMenu {
-                            Button {
-                                // Edit action will be added later
-                            } label: {
-                                Label("Edit", systemImage: "pencil")
-                            }
-                        }
-                } else if isLoading {
-                    ProgressView()
-                        .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
-                        .background(Color(uiColor: .secondarySystemBackground))
-                } else {
-                    // Fallback thumbnail or error state
-                    Rectangle()
-                        .foregroundColor(Color(uiColor: .secondarySystemBackground))
-                        .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
-                        .overlay(
-                            Group {
-                                if loadError {
-                                    Image(systemName: "photo.fill")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(width: 30, height: 30)
-                                        .foregroundColor(.gray)
-                                } else {
-                                    Image(systemName: "play.fill")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(width: 24, height: 24)
-                                        .foregroundColor(.primary)
-                                }
-                            }
-                        )
-                }
-            }
-            .cornerRadius(8)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(video.title)
-                    .font(.caption)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 4)
-            .padding(.bottom, 4)
-        }
-        .background(Color(uiColor: .systemBackground))
-        .cornerRadius(8)
-        .shadow(radius: 1, y: 1)
-        .padding(.vertical, 4) // Changed from .bottom to .vertical for consistent spacing
-        .alert("Delete Video", isPresented: $showDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                Task {
-                    await videoViewModel.deleteVideo(video)
-                }
-            }
-        } message: {
-            Text("Are you sure you want to delete this video? This action cannot be undone.")
-        }
-        .task {
-            isLoading = true
-            loadError = false
-            if let thumbnail = await video.loadThumbnail() {
-                self.thumbnail = thumbnail
-                isLoading = false
+                    }
+            } else if isLoading {
+                ProgressView()
+                    .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
+                    .background(Color(uiColor: .secondarySystemBackground))
             } else {
-                loadError = true
-                isLoading = false
+                Rectangle()
+                    .foregroundColor(Color(uiColor: .secondarySystemBackground))
+                    .frame(width: UIScreen.main.bounds.width/2 - 15, height: (UIScreen.main.bounds.width/2 - 15) * 3/4)
+                    .overlay(
+                        Image(systemName: "play.fill")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(.primary)
+                    )
+            }
+        }
+        .alert("Error", isPresented: $showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "An unknown error occurred")
+        }
+        .sheet(isPresented: $showEditView) {
+            if let projectVideos = projectVideos, let project = project {
+                EditExistingVideoView(videoURLs: projectVideos, project: project)
+            }
+        }
+    }
+    
+    private func loadProjectAndVideos() async {
+        print("📝 Starting to load project and videos...")
+        do {
+            let projectId = video.projectId
+            print("🔑 Project ID: \(projectId)")
+            
+            // Fetch project and its videos
+            async let projectTask = ProjectService.shared.fetchProject(projectId)
+            async let videosTask = VideoViewModel.shared.fetchProjectVideos(projectId)
+            
+            let (project, videos) = try await (projectTask, videosTask)
+//            print("✅ Loaded project and \(videos.count) videos")
+            
+            await MainActor.run {
+                self.project = project
+                self.projectVideos = videos
+                self.showEditView = true
+                print("🎬 Showing edit view")
+            }
+        } catch {
+            print("❌ Error loading project and videos: \(error)")
+            await MainActor.run {
+                self.errorMessage = error.localizedDescription
+                self.showError = true
             }
         }
     }
@@ -354,84 +398,28 @@ struct VideoPlayerSheet: View {
     @Environment(\.presentationMode) var presentationMode
     @State private var player: AVPlayer?
     @State private var isLoading = true
-    @State private var error: Error?
     
     var body: some View {
         ZStack {
-            Color.black.edgesIgnoringSafeArea(.all)
-            
             if let player = player {
                 VideoPlayer(player: player)
-                    .edgesIgnoringSafeArea(.all)
+                    .onAppear {
+                        player.play()
+                        isLoading = false
+                    }
+                    .onDisappear {
+                        player.pause()
+                    }
             }
             
             if isLoading {
                 ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
             }
-            
-            VStack {
-                HStack {
-                    Button(action: {
-                        player?.pause()
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Circle().fill(Color.black.opacity(0.6)))
-                    }
-                    Spacer()
-                }
-                Spacer()
-            }
-            .padding()
         }
-        .onAppear {
-            setupPlayer()
-        }
-        .onDisappear {
-            player?.pause()
-            player = nil
-        }
-    }
-    
-    private func setupPlayer() {
-        guard let url = URL(string: video.videoURL) else {
-            error = NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid video URL"])
-            isLoading = false
-            return
-        }
-        
-        let asset = AVURLAsset(url: url)
-        
-        Task {
-            do {
-                // Load asset properties
-                try await asset.load(.tracks, .duration)
-                
-                // Create player item and set up player
-                let playerItem = AVPlayerItem(asset: asset)
-                let newPlayer = AVPlayer(playerItem: playerItem)
-                
-                // Observe when the item is ready to play
-                NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: playerItem, queue: .main) { _ in
-                    newPlayer.seek(to: .zero)
-                    newPlayer.play()
-                }
-                
-                await MainActor.run {
-                    self.player = newPlayer
-                    self.isLoading = false
-                    newPlayer.play()
-                }
-            } catch {
-                print("❌ Error setting up player: \(error.localizedDescription)")
-                await MainActor.run {
-                    self.error = error
-                    self.isLoading = false
-                }
-            }
+        .task {
+            guard let urlValue = video.urlValue else { return }
+            player = AVPlayer(url: urlValue)
         }
     }
 }

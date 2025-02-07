@@ -6,6 +6,7 @@ class ProjectService {
     static let shared = ProjectService()
     private let db = Firestore.firestore()
     private let projectsCollection = "projects"
+    private let videosCollection = "videos"
     
     private init() {}
     
@@ -131,6 +132,67 @@ class ProjectService {
         return try snapshot.documents.compactMap { document in
             try document.data(as: Project.self)
         }
+    }
+    
+    func fetchProject(_ projectId: String) async throws -> Project {
+        print("📝 Fetching project: \(projectId)")
+        
+        let doc = try await db.collection("projects").document(projectId).getDocument()
+        guard let data = doc.data() else {
+            print("❌ Project not found: \(projectId)")
+            throw NSError(domain: "ProjectService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Project not found"])
+        }
+        
+        print("📄 Project data: \(data)")
+        
+        // Convert serialization dictionary to Data
+        var serializedSettings: Data?
+        if let serialization = data["serialization"] as? [String: Any] {
+            serializedSettings = try? JSONSerialization.data(withJSONObject: serialization)
+            print("✅ Successfully converted serialization to Data")
+        } else {
+            print("⚠️ No serialization data found")
+        }
+        
+        let project = Project(
+            id: doc.documentID,
+            authorId: data["author_id"] as? String ?? "",
+            title: data["title"] as? String ?? "",
+            description: data["description"] as? String,
+            thumbnailUrl: data["thumbnail_url"] as? String,
+            status: Project.ProjectStatus(rawValue: data["status"] as? String ?? "") ?? .created,
+            serializedSettings: serializedSettings,
+            createdAt: (data["created_at"] as? Timestamp)?.dateValue()
+        )
+        
+        print("✅ Created project object: \(project.id ?? "unknown")")
+        return project
+    }
+    
+    func fetchProjectVideos(projectId: String) async throws -> [Video] {
+        print("📝 Fetching videos for project: \(projectId)")
+        
+        let snapshot = try await db.collection("videos")
+            .whereField("project_id", isEqualTo: projectId)
+            .getDocuments()
+        
+        print("📊 Found \(snapshot.documents.count) videos")
+        
+        let videos = snapshot.documents.map { doc in
+            let data = doc.data()
+            print("📄 Video data: \(data)")
+            return Video(
+                id: doc.documentID,
+                authorId: data["author_id"] as? String ?? "",
+                projectId: data["project_id"] as? String ?? "",
+                url: data["url"] as? String ?? "",
+                startTime: data["startTime"] as? Double,
+                endTime: data["endTime"] as? Double
+            )
+        }
+        
+        print("✅ Mapped \(videos.count) videos")
+        return videos
     }
     
     // MARK: - Update
