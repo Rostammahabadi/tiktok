@@ -90,12 +90,19 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                     let projectRef = db.collection("projects").document()
                     let projectId = projectRef.documentID
                     
+                    // Generate and upload thumbnail
+                    print("🖼 Generating thumbnail")
+                    let thumbnail = try ThumbnailService.shared.generateThumbnail(from: exportedUrl)
+                    let thumbnailUrl = try await ThumbnailService.shared.uploadThumbnail(thumbnail, projectId: projectId)
+                    print("✅ Thumbnail generated and uploaded")
+                    
                     let project: [String: Any] = [
                         "author_id": userId,
                         "title": "Video Project",
                         "description": "User's video creation",
                         "status": "created",
-                        "created_at": FieldValue.serverTimestamp()
+                        "created_at": FieldValue.serverTimestamp(),
+                        "thumbnail_url": thumbnailUrl.absoluteString
                     ]
                     
                     try await projectRef.setData(project)
