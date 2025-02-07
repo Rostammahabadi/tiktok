@@ -1,10 +1,10 @@
 import Foundation
 import FirebaseFirestore
 
-struct VideoSegment: Codable {
-    let url: String
-    var startTime: Double?
-    var endTime: Double?
+public struct VideoSegment: Codable {
+    public let url: String
+    public var startTime: Double?
+    public var endTime: Double?
     
     enum CodingKeys: String, CodingKey {
         case url

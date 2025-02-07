@@ -35,6 +35,7 @@ class VideoViewModel: ObservableObject {
                     authorId: data["author_id"] as? String ?? "",
                     projectId: data["project_id"] as? String ?? "",
                     url: data["url"] as? String ?? "",
+                    storagePath: data["storagePath"] as? String ?? "",
                     startTime: data["startTime"] as? Double,
                     endTime: data["endTime"] as? Double,
                     order: data["order"] as? Int ?? 0
@@ -77,6 +78,7 @@ class VideoViewModel: ObservableObject {
                     authorId: data["author_id"] as? String ?? "",
                     projectId: data["project_id"] as? String ?? "",
                     url: data["url"] as? String ?? "",
+                    storagePath: data["storagePath"] as? String ?? "",
                     startTime: data["startTime"] as? Double,
                     endTime: data["endTime"] as? Double
                 )
@@ -113,6 +115,7 @@ class VideoViewModel: ObservableObject {
                     authorId: data["author_id"] as? String ?? "",
                     projectId: data["project_id"] as? String ?? "",
                     url: data["url"] as? String ?? "",
+                    storagePath: data["storagePath"] as? String ?? "",
                     startTime: data["startTime"] as? Double,
                     endTime: data["endTime"] as? Double
                 )

@@ -172,26 +172,28 @@ class ProjectService {
     func fetchProjectVideos(projectId: String) async throws -> [Video] {
         print("📝 Fetching videos for project: \(projectId)")
         
-        let snapshot = try await db.collection("videos")
+        let snapshot = try await db.collection(videosCollection)
             .whereField("project_id", isEqualTo: projectId)
+            .order(by: "order", descending: false)
             .getDocuments()
         
-        print("📊 Found \(snapshot.documents.count) videos")
-        
-        let videos = snapshot.documents.map { doc in
-            let data = doc.data()
-            print("📄 Video data: \(data)")
+        let videos = try snapshot.documents.map { document -> Video in
+            let data = document.data()
+            
             return Video(
-                id: doc.documentID,
+                id: document.documentID,
                 authorId: data["author_id"] as? String ?? "",
                 projectId: data["project_id"] as? String ?? "",
                 url: data["url"] as? String ?? "",
+                storagePath: data["storagePath"] as? String ?? "",
                 startTime: data["startTime"] as? Double,
-                endTime: data["endTime"] as? Double
+                endTime: data["endTime"] as? Double,
+                order: data["order"] as? Int ?? 0,
+                isDeleted: data["is_deleted"] as? Bool ?? false
             )
         }
         
-        print("✅ Mapped \(videos.count) videos")
+        print("✅ Found \(videos.count) videos")
         return videos
     }
     

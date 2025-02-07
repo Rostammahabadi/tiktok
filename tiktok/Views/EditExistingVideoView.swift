@@ -130,16 +130,20 @@ struct EditExistingVideoView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> VideoEditViewController {
         // Create video segments from URLs
         let segments = videoURLs.map { video -> VideoEditorSDK.VideoSegment in
-            guard let url = URL(string: video.url) else {
-                fatalError("Invalid URL: \(video.url)")
+            // Get the video URL
+            guard let url = video.urlValue else {
+                print("❌ Invalid URL for video: \(video.id)")
+                return VideoEditorSDK.VideoSegment(url: URL(fileURLWithPath: ""))
             }
-            return VideoEditorSDK.VideoSegment(url: url, startTime: video.startTime, endTime: video.endTime)
+            
+            print("🎬 Creating segment from URL: \(url)")
+            return VideoEditorSDK.VideoSegment(url: url)
         }
         
-        // Create a video from the segments
+        // Create video from segments
         let video = VideoEditorSDK.Video(segments: segments)
         
-        // Create and configure the editor
+        // Create editor with configuration
         let videoEditVC: VideoEditViewController
         
         if let serializedSettings = project.serializedSettings {
@@ -172,14 +176,7 @@ struct EditExistingVideoView: UIViewControllerRepresentable {
             )
         }
         
-        // Load serialized settings if available
-//        if let serializedSettings = project.serializedSettings {
-//            videoEditVC.loadSettings(serializedSettings)
-//        }
-        
-        // Set delegate
         videoEditVC.delegate = context.coordinator
-        
         return videoEditVC
     }
     

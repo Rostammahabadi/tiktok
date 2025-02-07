@@ -9,16 +9,17 @@ import FirebaseAuth
 
 class SaveVideoToRemoteURL: NSObject {
     weak var presentingViewController: UIViewController?
+    
     private let storage = Storage.storage()
     private let db = Firestore.firestore()
     
     // MARK: - Public Entry Point
-    /// Call this method after the user finishes editing in VideoEditorSDK.
+    /// Uploads all segments + main video, creates project/video docs, then triggers HLS conversion.
     ///
     /// - Parameters:
     ///   - mainVideoURL: The final exported video from PESDK (`result.output.url`).
     ///   - result: The `VideoEditorResult` containing segments, serialization, etc.
-    ///
+    ///   - serializedData: Optional PESDK serialization data (JSON).
     func uploadEditedVideoWithSegments(mainVideoURL: URL,
                                        result: VideoEditorResult,
                                        serializedData: Data?) {
@@ -32,183 +33,141 @@ class SaveVideoToRemoteURL: NSObject {
         let projectRef = db.collection("projects").document()
         let projectId = projectRef.documentID
         
-        // 3) Upload each segment to /users/{userId}/projects/{projectId}/videos/{segmentId}.mp4
-        //    And create a Firestore doc in "videos" for each segment
         Task {
             do {
-                // Optional: You can create the project doc right away (e.g., with partial data)
-                // and update it later once the thumbnail is generated, etc.
-                // For simplicity, let's gather some data first:
+                // 3) Upload each segment in parallel, create "videos" docs
+                let segmentIds = try await uploadSegments(
+                    segments: result.task.video.segments,
+                    userId: userId,
+                    projectId: projectId
+                )
                 
-                // 3a) Upload all segments
-                var segmentDocuments: [String] = []
-                
-                for segment in result.task.video.segments {
-                    let segmentDocRef = db.collection("videos").document()
-                    let segmentId = segmentDocRef.documentID
-                    print("📝 Segment ID: \(segmentId)")
-                    // Path in Firebase Storage
-                    let segmentStoragePath = "users/\(userId)/projects/\(projectId)/videos/\(segmentId).mp4"
-                    let segmentRef = storage.reference().child(segmentStoragePath)
-                    
-                    // Upload the segment file
-                    do {
-                        let processedSegmentURL = try await processVideoAsMP4(from: segment.url)
-                        let _ = try await segmentRef.putFileAsync(from: processedSegmentURL)
-                        print("✅ Uploaded segment: \(segmentId)")
-                        let downloadURL = try await segmentRef.downloadURL()
-                        print("✅ Download URL: \(downloadURL.absoluteString)")
-                        // 3b) Write segment metadata to Firestore
-                        var segmentData: [String: Any] = [
-                            "author_id": userId,
-                            "project_id": projectId,
-                            "url": downloadURL.absoluteString,
-                            "storagePath": segmentStoragePath,
-                            "is_deleted": false,
-                            "created_at": FieldValue.serverTimestamp(),
-                        ]
-                        print("✅ Segment data: \(segmentData)")
-                        segmentData["startTime"] = segment.startTime ?? NSNull()
-                        segmentData["endTime"] = segment.endTime ?? NSNull()
-                        print("✅ Segment data: \(segmentData)")
-                        try await segmentDocRef.setData(segmentData)
-                        print("✅ Segment doc created: \(segmentId)")
-                        segmentDocuments.append(segmentId)
-                    } catch {
-                        print("❌ Error uploading segment \(segmentId): \(error.localizedDescription)")
-                    }
-                }
-                
-                // 4) Process & upload the main final video to /videos/original/{videoId}.mov
-                //    Then store that doc in Firestore for HLS conversion
+                // 4) Process + upload the main final video to `/videos/original/{videoId}.mov`
                 let mainVideoId = UUID().uuidString
-                let mainVideoPath = "videos/original/\(mainVideoId).mov" // or .mp4, up to you
+                let mainVideoPath = "videos/original/\(mainVideoId).mov"
                 let mainVideoRef = storage.reference().child(mainVideoPath)
                 
-                print("📤 Processing main video...")
-                let processedURL = try await processVideoAsMOV(from: mainVideoURL)
+                // Export to .mov
+                let processedURL = try await exportVideo(
+                    from: mainVideoURL,
+                    fileType: .mov
+                )
                 
-                // Generate thumbnail for main video
-                let mainThumbnailPath = "videos/thumbnails/\(mainVideoId).jpg"
-                let thumbnailRef = storage.reference().child(mainThumbnailPath)
+                // Generate a thumbnail for the main video
+                let thumbnailData = try? await generateThumbnail(from: processedURL)
                 var mainThumbnailURL: URL?
-                
-                if let thumbnailData = try? await generateThumbnail(from: processedURL) {
-                    do {
-                        try await thumbnailRef.putDataAsync(thumbnailData)
-                        mainThumbnailURL = try? await thumbnailRef.downloadURL()
-                    } catch {
-                        print("❌ Error uploading main thumbnail: \(error.localizedDescription)")
-                    }
+                if let data = thumbnailData {
+                    let mainThumbnailPath = "videos/thumbnails/\(mainVideoId).jpg"
+                    let thumbnailRef = storage.reference().child(mainThumbnailPath)
+                    try await thumbnailRef.putDataAsync(data)
+                    mainThumbnailURL = try await thumbnailRef.downloadURL()
                 }
                 
-                // Actually upload the processed main video
-                print("📤 Uploading main video to \(mainVideoPath)")
+                // Upload the final .mov
                 try await mainVideoRef.putFileAsync(from: processedURL)
                 let finalMainVideoURL = try await mainVideoRef.downloadURL()
                 
-                // 4b) Create the Firestore doc for the main video
+                // Create Firestore doc for the main video
                 let mainVideoDocData: [String: Any] = [
                     "author_id": userId,
                     "project_id": projectId,
                     "originalUrl": finalMainVideoURL.absoluteString,
                     "originalPath": mainVideoPath,
                     "thumbnailUrl": mainThumbnailURL?.absoluteString ?? NSNull(),
-                    "thumbnailPath": mainThumbnailPath,
                     "created_at": FieldValue.serverTimestamp(),
-                    "status": "processing", // will be updated after HLS
+                    "status": "processing", // updated after HLS
                     "is_deleted": false
                 ]
                 try await db.collection("videos").document(mainVideoId).setData(mainVideoDocData)
                 
-                print("✅ Main video doc created: \(mainVideoId)")
-                
-                // 5) Create the project doc with serialization, referencing the main video
+                // 5) Create the project doc referencing segments + main video
                 var projectData: [String: Any] = [
                     "author_id": userId,
                     "created_at": FieldValue.serverTimestamp(),
                     "main_video_id": mainVideoId,
-                    "segment_ids": segmentDocuments, // array of references if you like
+                    "segment_ids": segmentIds,
                     "thumbnail_url": mainThumbnailURL?.absoluteString ?? NSNull()
                 ]
                 
-                // If you have serialized settings from PESDK:
+                // Include serialization JSON if available
                 if let serializedData = serializedData,
-                let serializationJSON = try? JSONSerialization.jsonObject(with: serializedData) as? [String: Any]
-                {
+                   let serializationJSON = try? JSONSerialization.jsonObject(with: serializedData) as? [String: Any] {
                     projectData["serialization"] = serializationJSON
                 }
                 
                 try await projectRef.setData(projectData)
-                print("✅ Project doc created: \(projectId)")
                 
                 // 6) Trigger HLS conversion for the main video
-                self.convertToHLS(filePath: mainVideoPath, videoId: mainVideoId)
+                convertToHLS(filePath: mainVideoPath, videoId: mainVideoId)
                 
-                print("🎉 All done! Segments uploaded, main video uploaded, project doc created, HLS triggered.")
+                print("🎉 All done! Uploaded segments + main video, created project doc, triggered HLS.")
                 
             } catch {
-                print("❌ Error while uploading edited video with segments: \(error.localizedDescription)")
+                print("❌ Error while uploading videos: \(error.localizedDescription)")
             }
         }
     }
     
-    func processVideoAsMP4(from sourceURL: URL) async throws -> URL {
-        let asset = AVURLAsset(url: sourceURL)
-        
-        // Attempt to create an export session
-        guard let exportSession = AVAssetExportSession(asset: asset,
-                                                       presetName: AVAssetExportPresetHighestQuality) else {
-            throw NSError(domain: "ReexportVideoSegment",
-                          code: -1,
-                          userInfo: [NSLocalizedDescriptionKey: "Could not create export session"])
-        }
-        
-        // Generate a stable temp file path for the .mp4
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString + ".mp4")
-        
-        exportSession.outputURL = outputURL
-        exportSession.outputFileType = .mp4
-        exportSession.shouldOptimizeForNetworkUse = true
-        
-        // Perform the export asynchronously
-        await exportSession.export()
-        
-        // Check export status
-        guard exportSession.status == .completed else {
-            // If there's an underlying error, throw it; otherwise, create a generic one.
-            if let error = exportSession.error {
-                throw error
-            } else {
-                throw NSError(domain: "ReexportVideoSegment",
-                              code: -2,
-                              userInfo: [NSLocalizedDescriptionKey: "Export session did not complete"])
+    // MARK: - Upload Segments in Parallel
+    /// Exports each segment to `.mp4`, uploads to `/users/{userId}/projects/{projectId}/videos/{segmentId}.mp4`
+    /// and creates a Firestore doc in `videos` for each. Returns the array of segment doc IDs.
+    private func uploadSegments(segments: [ImglyKit.VideoSegment],
+                                userId: String,
+                                projectId: String) async throws -> [String] {
+        var segmentIds = [String]()
+        var order = 0
+        // Use a TaskGroup to process segments in parallel
+        try await withThrowingTaskGroup(of: String.self) { group in
+            for segment in segments {
+                group.addTask {
+                    // 1) Create a new doc ID for this segment
+                    let segmentDocRef = self.db.collection("videos").document()
+                    let segmentId = segmentDocRef.documentID
+                    
+                    // 2) Export to a stable .mp4
+                    let segmentURL = try await self.exportVideo(from: segment.url, fileType: .mp4)
+                    
+                    // 3) Upload .mp4 to Storage
+                    let segmentStoragePath = "users/\(userId)/projects/\(projectId)/videos/\(segmentId).mp4"
+                    let segmentRef = self.storage.reference().child(segmentStoragePath)
+                    _ = try await segmentRef.putFileAsync(from: segmentURL)
+                    let downloadURL = try await segmentRef.downloadURL()
+                    
+                    // 4) Create Firestore doc
+                    var segmentData: [String: Any] = [
+                        "author_id": userId,
+                        "project_id": projectId,
+                        "url": downloadURL.absoluteString,
+                        "order": order,
+                        "storagePath": segmentStoragePath,
+                        "type": "segment",
+                        "is_deleted": false,
+                        "created_at": FieldValue.serverTimestamp(),
+                    ]
+                    if let startTime = segment.startTime {
+                        segmentData["startTime"] = startTime
+                    }
+                    if let endTime = segment.endTime {
+                        segmentData["endTime"] = endTime
+                    }
+                    
+                    try await segmentDocRef.setData(segmentData)
+                    order += 1
+                    return segmentId
+                }
+            }
+            // Collect results from the group
+            for try await segmentId in group {
+                segmentIds.append(segmentId)
             }
         }
         
-        // Return the new file URL
-        return outputURL
+        return segmentIds
     }
     
-    // MARK: - Thumbnail Generation
-    private func generateThumbnail(from videoURL: URL) async throws -> Data? {
-        let asset = AVURLAsset(url: videoURL)
-        
-        // Load tracks (async)
-        try await asset.load(.tracks)
-        
-        let imageGenerator = AVAssetImageGenerator(asset: asset)
-        imageGenerator.appliesPreferredTrackTransform = true
-        
-        let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
-        let uiImage = UIImage(cgImage: cgImage)
-        return uiImage.jpegData(compressionQuality: 0.7)
-    }
-    
-    // MARK: - Process Video (Export as .mov)
-    /// If you want to keep the final extension `.mov`, set `outputFileType = .mov`.
-    private func processVideoAsMOV(from sourceURL: URL) async throws -> URL {
+    // MARK: - Export Video (configurable)
+    /// Exports the given video URL to the requested file type (e.g., .mp4 or .mov) at high quality.
+    private func exportVideo(from sourceURL: URL, fileType: AVFileType) async throws -> URL {
         let asset = AVURLAsset(url: sourceURL)
         
         // Load required asset properties
@@ -220,11 +179,13 @@ class SaveVideoToRemoteURL: NSObject {
             ])
         }
         
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(UUID().uuidString).mov")
+        // Construct output path
+        let extensionStr = fileType == .mp4 ? ".mp4" : ".mov"
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + extensionStr)
         
-        exportSession.outputURL = tempURL
-        exportSession.outputFileType = .mov
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = fileType
         exportSession.shouldOptimizeForNetworkUse = true
         
         await exportSession.export()
@@ -233,18 +194,32 @@ class SaveVideoToRemoteURL: NSObject {
             throw exportSession.error ?? NSError(
                 domain: "SaveVideoToRemoteURL",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Export failed with status: \(exportSession.status.rawValue)"]
+                userInfo: [NSLocalizedDescriptionKey:
+                    "Export failed with status: \(exportSession.status.rawValue)"]
             )
         }
         
-        return tempURL
+        return outputURL
+    }
+    
+    // MARK: - Thumbnail Generation
+    private func generateThumbnail(from videoURL: URL) async throws -> Data? {
+        let asset = AVURLAsset(url: videoURL)
+        try await asset.load(.tracks) // load tracks
+        
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+        
+        let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
+        let uiImage = UIImage(cgImage: cgImage)
+        return uiImage.jpegData(compressionQuality: 0.7)
     }
     
     // MARK: - HLS Conversion
     func convertToHLS(filePath: String, videoId: String) {
         print("🎬 Starting HLS conversion for video: \(videoId)")
         
-        db.collection("videos").document(videoId).getDocument { (document, error) in
+        db.collection("videos").document(videoId).getDocument { document, error in
             if let error = error {
                 print("❌ Firestore error: \(error.localizedDescription)")
                 return
@@ -265,7 +240,6 @@ class SaveVideoToRemoteURL: NSObject {
                 print("❌ Could not get Firebase project ID")
                 return
             }
-            
             let functionRegion = "us-central1"
             let functionURLString = "https://\(functionRegion)-\(projectID).cloudfunctions.net/convertVideoToHLS"
             guard let functionURL = URL(string: functionURLString) else {
@@ -278,34 +252,28 @@ class SaveVideoToRemoteURL: NSObject {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             
             let requestBody: [String: Any] = ["filePath": originalPath]
-            
             do {
-                let jsonData = try JSONSerialization.data(withJSONObject: requestBody, options: [])
-                request.httpBody = jsonData
+                request.httpBody = try JSONSerialization.data(withJSONObject: requestBody, options: [])
             } catch {
                 print("❌ Failed to serialize request body: \(error.localizedDescription)")
                 return
             }
             
-            // Perform the call
+            // Call the function
             let task = URLSession.shared.dataTask(with: request) { data, response, error in
                 if let error = error {
                     print("❌ Network error: \(error.localizedDescription)")
                     return
                 }
                 
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    print("❌ Invalid response type")
-                    return
-                }
-                
-                guard let data = data else {
-                    print("❌ No data received from HLS function")
+                guard let httpResponse = response as? HTTPURLResponse,
+                      let data = data else {
+                    print("❌ Invalid response or no data")
                     return
                 }
                 
                 do {
-                    if let responseJSON = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                    if let responseJSON = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                         print("📦 HLS Function Response: \(responseJSON)")
                         
                         if httpResponse.statusCode == 200 {
@@ -320,7 +288,6 @@ class SaveVideoToRemoteURL: NSObject {
                                     "hlsUrl": hlsURL,
                                     "type": "hls"
                                 ]
-                                
                                 self.db.collection("videos").document(videoId).updateData(updateData) { err in
                                     if let err = err {
                                         print("❌ Failed to update Firestore with HLS info: \(err.localizedDescription)")
@@ -343,7 +310,6 @@ class SaveVideoToRemoteURL: NSObject {
                     }
                 }
             }
-            
             task.resume()
         }
     }

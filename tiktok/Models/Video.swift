@@ -6,24 +6,30 @@ struct Video: Identifiable, Codable {
     let authorId: String
     let projectId: String
     let url: String
+    let storagePath: String
     let startTime: Double?
     let endTime: Double?
     let order: Int
+    let isDeleted: Bool
     
     init(id: String = UUID().uuidString,
          authorId: String,
          projectId: String,
          url: String,
+         storagePath: String,
          startTime: Double? = nil,
          endTime: Double? = nil,
-         order: Int = 0) {
+         order: Int = 0,
+         isDeleted: Bool = false) {
         self.id = id
         self.authorId = authorId
         self.projectId = projectId
         self.url = url
+        self.storagePath = storagePath
         self.startTime = startTime
         self.endTime = endTime
         self.order = order
+        self.isDeleted = isDeleted
     }
     
     enum CodingKeys: String, CodingKey {
@@ -31,9 +37,11 @@ struct Video: Identifiable, Codable {
         case authorId = "author_id"
         case projectId = "project_id"
         case url
+        case storagePath = "storage_path"
         case startTime = "start_time"
         case endTime = "end_time"
         case order
+        case isDeleted = "is_deleted"
     }
     
     var urlValue: URL? {
