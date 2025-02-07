@@ -292,18 +292,19 @@ class VideoFeedViewModel: ObservableObject {
     private var isFetching = false
     
     func fetchVideos() {
-        guard !isFetching else { return }
-        print("🔍 Starting to fetch videos...")
+        print("🎬 Fetching videos...")
         isLoading = true
-        isFetching = true
         
         var query = db.collection("videos")
             .whereField("status", isEqualTo: "completed")
-            .order(by: "createdAt", descending: true)
+            .whereField("type", isEqualTo: "hls")
+            .order(by: "created_at", descending: true)
             .limit(to: batchSize)
+        print("🔍 Querying Firestore collection 'videos'...")
+        print("🔍 Query: \(query)")
         
         query.getDocuments { [weak self] snapshot, error in
-            guard let self = self else { return }
+            guard let self = self else { return } 
             self.isFetching = false
             
             if let error = error {
@@ -339,7 +340,8 @@ class VideoFeedViewModel: ObservableObject {
         
         db.collection("videos")
             .whereField("status", isEqualTo: "completed")
-            .order(by: "createdAt", descending: true)
+            .whereField("type", isEqualTo: "hls")
+            .order(by: "created_at", descending: true)
             .limit(to: batchSize)
             .start(afterDocument: lastDocument)
             .getDocuments { [weak self] snapshot, error in
