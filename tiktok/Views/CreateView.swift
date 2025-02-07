@@ -98,7 +98,7 @@ struct CreateView: View {
                                 guard let videoURL = url else { return }
                                 
                                 // Wrap MyVideoEditorView in a UIHostingController
-                                let editorHosting = UIHostingController(rootView: MyVideoEditorView(videoURL: videoURL))
+                                let editorHosting = UIHostingController(rootView: MyVideoEditorViewWrapper(videoURL: videoURL))
                                 editorHosting.modalPresentationStyle = .fullScreen
                                 
                                 // Present the editor

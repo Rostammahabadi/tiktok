@@ -89,7 +89,7 @@ struct EditExistingVideoView: UIViewControllerRepresentable {
                         "author_id": userId,
                         "created_at": FieldValue.serverTimestamp(),
                         "thumbnail_url": thumbnailUrl.absoluteString,
-                        "original_urls": parent.videoURLs.map { $0 },
+                        "original_urls": parent.videoURLs.map { $0.url },
                         "serialization": serialization,
                     ]
                     
@@ -98,6 +98,7 @@ struct EditExistingVideoView: UIViewControllerRepresentable {
                     
                     // Create video documents
                     let videosCollection = db.collection("videos")
+                    var order = 0
                     for segment in processedSegments {
                         let videoRef = videosCollection.document()
                         print("📝 Creating video document: \(videoRef.documentID)")
@@ -107,9 +108,12 @@ struct EditExistingVideoView: UIViewControllerRepresentable {
                             "project_id": projectId,
                             "url": segment["url"] as! String,
                             "startTime": segment["startTime"] ?? NSNull(),
-                            "endTime": segment["endTime"] ?? NSNull()
+                            "endTime": segment["endTime"] ?? NSNull(),
+                            "order": order,
+                            "is_deleted": false
                         ])
                         print("✅ Created video document: \(videoRef.documentID)")
+                        order += 1
                     }
                     
                 } catch {

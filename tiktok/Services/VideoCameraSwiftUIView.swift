@@ -24,10 +24,9 @@ private extension UIImage {
 struct VideoCameraSwiftUIView: View {
     // MARK: - Properties
     internal var dismissAction: (() -> Void)?
-    @State private var video: VideoEditorSDK.Video?
+    @State private var videoURL: URL?
     @State private var vesdkPresented: Bool = false
     @State private var photoEditModel: PhotoEditModel?
-    private let saveVideoService = SaveVideoToRemoteURL()
     @State private var showBirdAnimation = false
     
     // MARK: - Configuration
@@ -66,12 +65,6 @@ struct VideoCameraSwiftUIView: View {
                 options.showCancelButton = true
             }
             
-            // Configure overlay tool
-            builder.configureOverlayToolController { options in
-                options.initialOverlayIntensity = 0.5
-                options.showOverlayIntensitySlider = false
-            }
-            
             builder.theme = .dynamic
         }
     }()
@@ -86,26 +79,21 @@ struct VideoCameraSwiftUIView: View {
                 .onDidSave { result in
                     photoEditModel = result.model
                     if let url = result.url {
-                        video = VideoEditorSDK.Video(url: url)
+                        videoURL = url
                     }
                 }
                 .ignoresSafeArea()
                 .fullScreenCover(isPresented: $vesdkPresented) {
                     dismissAction?()
                 } content: {
-                    if let video = video {
-                        VideoEditor(video: video, configuration: configuration, photoEditModel: photoEditModel)
-                            .onDidSave { result in
-                                handleVideoSave(result)
-                                // Show the graduation bird animation after successful save
+                    if let url = videoURL {
+                        MyVideoEditorViewWrapper(videoURL: url)
+                            .onDisappear {
                                 showBirdAnimation = true
-                            }
-                            .onDidCancel {
-                                dismissAction?()
                             }
                     }
                 }
-                .onChange(of: video) { _ in
+                .onChange(of: videoURL) { _ in
                     vesdkPresented = true
                 }
             
@@ -117,32 +105,5 @@ struct VideoCameraSwiftUIView: View {
                 }
             }
         }
-    }
-    
-    // MARK: - Private Methods
-    private func handleVideoSave(_ result: VideoEditorResult) {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            print("❌ No authenticated user")
-            dismissAction?()
-            return
-        }
-        
-        // Create video metadata
-        let videoMetadata = [
-            "authorId": userId,
-            "createdAt": FieldValue.serverTimestamp(),
-            "title": "Video \(UUID().uuidString.prefix(6))",
-            "description": "Created on \(Date())",
-            "status": "processing",
-            "isDeleted": false
-        ] as [String : Any]
-        
-        // Upload video
-        saveVideoService.uploadVideo(
-            from: result.output.url,
-            result: result
-        )
-        
-        print("📹 Received video at \(result.output.url.absoluteString)")
     }
 }

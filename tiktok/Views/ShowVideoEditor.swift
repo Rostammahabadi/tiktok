@@ -77,58 +77,8 @@ class ShowVideoEditor: NSObject {
     }
 
     func showVideoEditor(with videoURL: URL) {
-        saveVideoService.presentingViewController = self.presentingViewController
-        
-        // Create video from passed URL
-        let video = VideoEditorSDK.Video(url: videoURL)
-        
-        let configuration = Configuration { builder in
-            // Configure the `OverlayToolController` which lets the user
-            // place overlays on top of the video.
-            builder.configureOverlayToolController { options in
-                // By default the editor has an initial overlay intensity of
-                // 100% (1). For this example it only uses 50% (0.5).
-                options.initialOverlayIntensity = 0.5
-                
-                // By default the editor shows a slider to let the user change
-                // the intensity of an overlay. For this example this is disabled.
-                // Thereby the overlays will always have an intensity of 50% (0.5)
-                // since we applied this with the `initialOverlayIntensity`.
-                options.showOverlayIntensitySlider = false
-            }
-            
-            builder.theme = .dynamic
-        }
-        
-        var videoEditor = VideoEditorSwiftUIView(video: video, configuration: configuration)
-
-        videoEditor.dismissAction = {
-            self.presentingViewController?.dismiss(animated: true, completion: nil)
-        }
-
-        videoEditor.saveVideoAction = { [weak self] result in
-            guard let userId = Auth.auth().currentUser?.uid else {
-                print("❌ No authenticated user")
-                return
-            }
-            
-            // Create video metadata
-            let videoMetadata = [
-                "authorId": userId,
-                "createdAt": FieldValue.serverTimestamp(),
-                "title": "Video \(UUID().uuidString.prefix(6))",
-                "description": "Created on \(Date())",
-                "status": "processing",
-                "isDeleted": false
-            ] as [String : Any]
-            
-            // Upload without metadata parameter since it's not supported yet
-            self?.saveVideoService.uploadVideo(
-                from: result.output.url,
-                result: result
-            )
-        }
-
+        // Create and present the MyVideoEditorViewWrapper
+        let videoEditor = MyVideoEditorViewWrapper(videoURL: videoURL)
         let hostingController = UIHostingController(rootView: videoEditor)
         hostingController.modalPresentationStyle = .fullScreen
         presentingViewController?.present(hostingController, animated: true, completion: nil)

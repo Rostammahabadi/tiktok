@@ -6,34 +6,25 @@ import Swift
 
 struct MyVideoEditorView: UIViewControllerRepresentable {
     let videoURL: URL
+    @Binding var showBirdAnimation: Bool
+    @Binding var isUploading: Bool
+    
     var configuration: Configuration = {
         Configuration { builder in
-            // For instance, set the theme to dark
             builder.theme = .dark
-            
-            // Other customizations, e.g.:
-            // builder.configureTransformToolController { options in
-            //     options.allowFreeCrop = false
-            // }
         }
     }()
     
     func makeUIViewController(context: Context) -> VideoEditViewController {
-        // 1. Create your `Video` model
         let video = VideoEditorSDK.Video(url: videoURL)
-        
-        // 2. Create the video editor view controller
         let videoEditVC = VideoEditViewController(videoAsset: video, configuration: configuration)
-        
-        // 3. Set the delegate to your Coordinator
         videoEditVC.delegate = context.coordinator
-        
         return videoEditVC
     }
     
     func updateUIViewController(_ uiViewController: VideoEditViewController,
                                 context: Context) {
-        // no-op (usually)
+        // no-op
     }
     
     // MARK: - Coordinator
@@ -45,6 +36,9 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
     class Coordinator: NSObject, VideoEditViewControllerDelegate {
         func videoEditViewControllerDidFail(_ videoEditViewController: ImglyKit.VideoEditViewController, error: ImglyKit.VideoEditorError) {
             print("failed")
+            parent.showBirdAnimation = false
+            parent.isUploading = false
+            videoEditViewController.dismiss(animated: true)
         }
         
         let parent: MyVideoEditorView
@@ -54,16 +48,18 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
         }
         
         // MARK: - VideoEditViewControllerDelegate
-        
-        // This is the main callback where you get both the `videoEditViewController.serializedSettings`
-        // and the `result` which includes final video export info & segments.
         func videoEditViewControllerDidFinish(_ videoEditViewController: ImglyKit.VideoEditViewController,
                                               result: ImglyKit.VideoEditorResult) {
-            videoEditViewController.dismiss(animated: true)
+            // Show bird animation immediately when user finishes editing
+            parent.showBirdAnimation = true
+            parent.isUploading = true
             
             // 1) Basic Auth check
             guard let userId = Auth.auth().currentUser?.uid else {
                 print("❌ No authenticated user.")
+                parent.showBirdAnimation = false
+                parent.isUploading = false
+                videoEditViewController.dismiss(animated: true)
                 return
             }
             
@@ -99,55 +95,66 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                     
                     // Generate and upload thumbnail
                     print("🖼 Generating thumbnail")
-                    let thumbnail = try await ThumbnailService.shared.generateThumbnail(from: exportedUrl)
+                    let thumbnail = try await ThumbnailService.shared.generateThumbnail(from: result.output.url)
                     let thumbnailUrl = try await ThumbnailService.shared.uploadThumbnail(thumbnail, projectId: projectId)
                     print("✅ Thumbnail generated and uploaded")
                     
-                    // Upload each segment and collect their data
+                    // Upload each segment
                     var processedSegments: [[String: Any]] = []
                     
-                    for (index, (segmentUrl, segmentData)) in segmentUrls.enumerated() {
-                        print("📤 Uploading segment \(index + 1)")
-                        let segmentStorageUrl = try await StorageService.shared.uploadVideo(from: segmentUrl, projectId: projectId)
+                    for segment in result.task.video.segments {
+                        print("📤 Uploading segment")
+                        let segmentStorageUrl = try await StorageService.shared.uploadVideo(from: segment.url, projectId: projectId)
                         
-                        var segment = segmentData
-                        print("segment: \(segment)")
-                        segment["url"] = segmentStorageUrl.absoluteString
-                        processedSegments.append(segment)
-                        print("✅ Processed segment \(index + 1)")
+                        var segmentData: [String: Any] = [
+                            "url": segmentStorageUrl.absoluteString
+                        ]
+                        
+                        if let startTime = segment.startTime {
+                            segmentData["startTime"] = startTime
+                        }
+                        
+                        if let endTime = segment.endTime {
+                            segmentData["endTime"] = endTime
+                        }
+                        
+                        processedSegments.append(segmentData)
                     }
                     
-                    // Serialize the editor settings
+                    // Get serialization data
                     guard let serializedData = videoEditViewController.serializedSettings,
                           let serialization = try? JSONSerialization.jsonObject(with: serializedData, options: []) as? [String: Any] else {
                         print("⚠️ Could not serialize editor settings")
+                        parent.showBirdAnimation = false
+                        parent.isUploading = false
+                        videoEditViewController.dismiss(animated: true)
                         return
                     }
                     
+                    guard !processedSegments.isEmpty else {
+                        print("❌ No segments to process")
+                        parent.showBirdAnimation = false
+                        parent.isUploading = false
+                        videoEditViewController.dismiss(animated: true)
+                        return
+                    }
+                    
+                    // Create project document with all URLs
                     let project: [String: Any] = [
                         "author_id": userId,
-                        "title": "Video Project",
-                        "description": "User's video creation",
-                        "status": "created",
                         "created_at": FieldValue.serverTimestamp(),
                         "thumbnail_url": thumbnailUrl.absoluteString,
-                        // "segments": processedSegments,
+                        "original_urls": parent.videoURL.absoluteString,
                         "serialization": serialization,
                     ]
                     
                     try await projectRef.setData(project)
                     print("✅ Created project \(projectId)")
                     
-                    // Upload main video
-                    let mainVideoUrl = try await StorageService.shared.uploadVideo(from: exportedUrl, projectId: projectId)
-                    print("✅ Uploaded main video")
-                    
-                    
-                    // Create video documents for each segment
+                    // Create video documents
                     let videosCollection = db.collection("videos")
                     var order = 0
                     for segment in processedSegments {
-                        // Create a new document for each segment
                         let videoRef = videosCollection.document()
                         print("📝 Creating video document: \(videoRef.documentID)")
                         
@@ -164,8 +171,17 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                         order += 1
                     }
                     
+                    // All done - dismiss after a short delay to show completion
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        self.parent.isUploading = false
+                        videoEditViewController.dismiss(animated: true)
+                    }
+                    
                 } catch {
                     print("❌ Error processing video: \(error.localizedDescription)")
+                    parent.showBirdAnimation = false
+                    parent.isUploading = false
+                    videoEditViewController.dismiss(animated: true)
                 }
             }
         }
@@ -173,13 +189,30 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
         // Called if the user cancels (without exporting)
         func videoEditViewControllerDidCancel(_ videoEditViewController: VideoEditViewController) {
             videoEditViewController.dismiss(animated: true)
-            print("🚫 Editor cancelled")
         }
-        
-        func videoEditViewController(_ videoEditViewController: VideoEditViewController,
-                                     didFailWith error: Error) {
-            videoEditViewController.dismiss(animated: true)
-            print("❌ Editor error: \(error)")
+    }
+}
+
+// MARK: - UIViewControllerRepresentable Wrapper for GraduationBirdAnimation
+struct MyVideoEditorViewWrapper: View {
+    let videoURL: URL
+    @State private var showBirdAnimation = false
+    @State private var isUploading = false
+    
+    var body: some View {
+        ZStack {
+            MyVideoEditorView(videoURL: videoURL,
+                            showBirdAnimation: $showBirdAnimation,
+                            isUploading: $isUploading)
+            
+            if showBirdAnimation {
+                GraduationBirdAnimation(isShowing: $showBirdAnimation) {
+                    // Only dismiss if we're not still uploading
+                    if !isUploading {
+                        showBirdAnimation = false
+                    }
+                }
+            }
         }
     }
 }
