@@ -70,6 +70,8 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                         serializedData: serializedData,
                         projectId: firebaseProjectId
                     )
+                    // Notify that a new video was saved locally
+                    NotificationCenter.default.post(name: Notification.Name("NewVideoSavedLocally"), object: nil)
                 }
                 print("✅ Serialization data: \(serializedData)")
                 // Kick off the entire upload + project creation + HLS flow
