@@ -22,7 +22,8 @@ class SaveVideoToRemoteURL: NSObject {
     ///   - serializedData: Optional PESDK serialization data (JSON).
     func uploadEditedVideoWithSegments(mainVideoURL: URL,
                                        result: VideoEditorResult,
-                                       serializedData: Data?) {
+                                       serializedData: Data?,
+                                       forcedProjectId: String? = nil) {
         // 1) Auth check
         guard let userId = Auth.auth().currentUser?.uid else {
             print("❌ No authenticated user")
@@ -30,8 +31,9 @@ class SaveVideoToRemoteURL: NSObject {
         }
         
         // 2) Create a new "project" document in Firestore
-        let projectRef = db.collection("projects").document()
-        let projectId = projectRef.documentID
+        let projectRef = db.collection("projects").document(forcedProjectId!)
+        print("ProjectId \(forcedProjectId!)")
+        let projectId = forcedProjectId!
         
         Task {
             do {
@@ -82,6 +84,7 @@ class SaveVideoToRemoteURL: NSObject {
                 
                 // 5) Create the project doc referencing segments + main video
                 var projectData: [String: Any] = [
+                    "id": projectId,
                     "author_id": userId,
                     "created_at": FieldValue.serverTimestamp(),
                     "main_video_id": mainVideoId,
@@ -95,8 +98,8 @@ class SaveVideoToRemoteURL: NSObject {
                     projectData["serialization"] = serializationJSON
                 }
                 
-                try await projectRef.setData(projectData)
-                
+                let xyz = try await projectRef.setData(projectData)
+                print(xyz)
                 // 6) Trigger HLS conversion for the main video
                 convertToHLS(filePath: mainVideoPath, videoId: mainVideoId)
                 
@@ -107,6 +110,8 @@ class SaveVideoToRemoteURL: NSObject {
             }
         }
     }
+    
+    
     
     // MARK: - Upload Segments in Parallel
     /// Exports each segment to `.mp4`, uploads to `/users/{userId}/projects/{projectId}/videos/{segmentId}.mp4`
@@ -240,6 +245,7 @@ class SaveVideoToRemoteURL: NSObject {
                 print("❌ Could not get Firebase project ID")
                 return
             }
+            print("projectId within SaveVideoToRemoveURL: \(projectID)")
             let functionRegion = "us-central1"
             let functionURLString = "https://\(functionRegion)-\(projectID).cloudfunctions.net/convertVideoToHLS"
             guard let functionURL = URL(string: functionURLString) else {

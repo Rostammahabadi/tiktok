@@ -57,15 +57,27 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
             // Get serialization data
             Task {
                 let serializedData = await videoEditViewController.serializedSettings
-                
+                let localSaver = SaveVideoToLocalURL()
                 // Instantiate the helper
                 let saver = SaveVideoToRemoteURL()
+                let projectRef = Firestore.firestore().collection("projects").document()
+                let firebaseProjectId = projectRef.documentID  // e.g. "E1jPiuEE8Yt1mVgJTIfM"
+                print("firebaseProjectId: \(firebaseProjectId)")
+                Task {
+                    try? await localSaver.saveEditedVideoWithSegmentsLocally(
+                        mainVideoURL: result.output.url,
+                        result: result,
+                        serializedData: serializedData,
+                        projectId: firebaseProjectId
+                    )
+                }
                 print("✅ Serialization data: \(serializedData)")
                 // Kick off the entire upload + project creation + HLS flow
                 saver.uploadEditedVideoWithSegments(
                     mainVideoURL: result.output.url,
                     result: result,
-                    serializedData: serializedData
+                    serializedData: serializedData,
+                    forcedProjectId: firebaseProjectId
                 )
                 
                 // Dismiss after a short delay

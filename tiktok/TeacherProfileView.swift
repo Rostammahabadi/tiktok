@@ -4,6 +4,7 @@ import AVKit
 
 class ProjectViewModel: ObservableObject {
     @Published var projects: [Project] = []
+    @Published var thumbnails: [String: UIImage] = [:] // projectId -> thumbnail
     @Published var isLoading = false
     
     func fetchProjects() async {
@@ -12,9 +13,34 @@ class ProjectViewModel: ObservableObject {
         }
         
         do {
+            // Debug: Print Documents directory
+            let docsURL = try FileManager.default.url(for: .documentDirectory,
+                                                    in: .userDomainMask,
+                                                    appropriateFor: nil,
+                                                    create: false)
+            print("📂 Documents Directory: \(docsURL.path)")
+            print("📂 Local Projects Directory: \(docsURL.appendingPathComponent("LocalProjects").path)")
+            
+            // 1. Fetch all projects
             let fetchedProjects = try await ProjectService.shared.fetchUserProjects()
+            
+            // 2. Load all thumbnails in parallel
+            let projectIds = fetchedProjects.compactMap { $0.id }
+            let thumbnails = await LocalThumbnailService.shared.loadThumbnails(projectIds: projectIds)
+            
+            // Debug: Print project paths
+            for projectId in projectIds {
+                let projectPath = docsURL.appendingPathComponent("LocalProjects/\(projectId)")
+                print("📂 Project \(projectId):")
+                print("   📄 Project JSON: \(projectPath.appendingPathComponent("project.json").path)")
+                print("   🖼️ Thumbnail: \(projectPath.appendingPathComponent("thumbnail.jpeg").path)")
+                print("   📹 Videos Directory: \(projectPath.appendingPathComponent("videos").path)")
+            }
+            
+            // 3. Update UI
             await MainActor.run {
                 self.projects = fetchedProjects
+                self.thumbnails = thumbnails
                 self.isLoading = false
             }
         } catch {
@@ -37,60 +63,67 @@ struct TeacherProfileView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Profile header
-                        VStack {
-                            Image(systemName: "person.crop.circle.fill")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 100, height: 100)
-                                .foregroundColor(Theme.accentColor)
-                            
-                            Text("Jane Smith")
-                                .font(Theme.titleFont)
-                                .foregroundColor(Theme.accentColor)
-                            
-                            Text("Math Teacher | 10 years experience")
-                                .font(Theme.bodyFont)
-                                .foregroundColor(Theme.textColor.opacity(0.8))
-                        }
-                        .padding()
-                        
-                        // Tab view for projects, videos and about
-                        Picker("", selection: $selectedTab) {
-                            Text("Projects").tag(0)
-                            Text("About").tag(1)
-                        }
-                        .pickerStyle(SegmentedPickerStyle())
-                        .padding(.horizontal)
-                        
-                        if selectedTab == 0 {
-                            // Projects grid
-                            LazyVGrid(columns: [
-                                GridItem(.flexible()),
-                                GridItem(.flexible())
-                            ], spacing: 16) {
-                                ForEach(projectViewModel.projects) { project in
-                                    ProjectThumbnail(project: project)
-                                        .onTapGesture {
-                                            selectedProject = project
-                                        }
-                                }
-                            }
-                            .padding(.horizontal)
-                        } else {
-                            // About section
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("About Me")
-                                    .font(Theme.headlineFont)
-                                    .foregroundColor(Theme.textColor)
+                RefreshableScrollView(onRefresh: { done in
+                    Task {
+                        await projectViewModel.fetchProjects()
+                        done()
+                    }
+                }) {
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            // Profile header
+                            VStack {
+                                Image(systemName: "person.crop.circle.fill")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 100, height: 100)
+                                    .foregroundColor(Theme.accentColor)
                                 
-                                Text("I'm passionate about making math accessible and fun for all students. With 10 years of teaching experience, I specialize in creating engaging video content to supplement classroom learning.")
+                                Text("Jane Smith")
+                                    .font(Theme.titleFont)
+                                    .foregroundColor(Theme.accentColor)
+                                
+                                Text("Math Teacher | 10 years experience")
                                     .font(Theme.bodyFont)
                                     .foregroundColor(Theme.textColor.opacity(0.8))
                             }
+                            .padding()
+                            
+                            // Tab view for projects, videos and about
+                            Picker("", selection: $selectedTab) {
+                                Text("Projects").tag(0)
+                                Text("About").tag(1)
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
                             .padding(.horizontal)
+                            
+                            if selectedTab == 0 {
+                                // Projects grid
+                                LazyVGrid(columns: [
+                                    GridItem(.flexible()),
+                                    GridItem(.flexible())
+                                ], spacing: 16) {
+                                    ForEach(projectViewModel.projects) { project in
+                                        ProjectThumbnail(project: project, viewModel: projectViewModel)
+                                            .onTapGesture {
+                                                selectedProject = project
+                                            }
+                                    }
+                                }
+                                .padding(.horizontal)
+                            } else {
+                                // About section
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text("About Me")
+                                        .font(Theme.headlineFont)
+                                        .foregroundColor(Theme.textColor)
+                                    
+                                    Text("I'm passionate about making math accessible and fun for all students. With 10 years of teaching experience, I specialize in creating engaging video content to supplement classroom learning.")
+                                        .font(Theme.bodyFont)
+                                        .foregroundColor(Theme.textColor.opacity(0.8))
+                                }
+                                .padding(.horizontal)
+                            }
                         }
                     }
                 }
@@ -153,7 +186,7 @@ struct TeacherProfileView: View {
 
 struct ProjectThumbnail: View {
     let project: Project
-    @State private var thumbnailImage: UIImage?
+    @ObservedObject var viewModel: ProjectViewModel
     @State private var projectVideos: [Video]?
     @State private var showEditView = false
     @State private var isLoading = false
@@ -162,8 +195,8 @@ struct ProjectThumbnail: View {
     var body: some View {
         VStack {
             ZStack {
-                if let thumbnailImage = thumbnailImage {
-                    Image(uiImage: thumbnailImage)
+                if let image = viewModel.thumbnails[project.id ?? ""] {
+                    Image(uiImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 150, height: 150)
@@ -227,19 +260,6 @@ struct ProjectThumbnail: View {
                 Text(errorMessage)
             }
         }
-        .task {
-            if let thumbnailUrl = project.thumbnailUrl,
-               let url = URL(string: thumbnailUrl) {
-                do {
-                    let (data, _) = try await URLSession.shared.data(from: url)
-                    if let image = UIImage(data: data) {
-                        thumbnailImage = image
-                    }
-                } catch {
-                    print("❌ Error loading thumbnail: \(error)")
-                }
-            }
-        }
     }
     
     private func loadAndPrepareVideos() async {
@@ -253,7 +273,7 @@ struct ProjectThumbnail: View {
             
             // 1. Fetch videos from Firestore
             print("📝 Fetching videos for project: \(projectId)")
-            let remoteVideos = try await ProjectService.shared.fetchProjectVideos(projectId: projectId)
+            let remoteVideos = try await LocalProjectService.shared.loadAndPrepareVideosLocally(projectId: projectId)
             print("✅ Found \(remoteVideos.count) videos")
             
             // 2. Download each video locally
@@ -409,7 +429,8 @@ struct VideoThumbnail: View {
                         Button {
                             Task {
                                 print("🖊️ Edit button tapped")
-                                await loadProjectAndVideos()
+                                await loadProjectVideosLocally()
+//                                await loadProjectAndVideos()
                             }
                         } label: {
                             Label("Edit", systemImage: "pencil")
@@ -444,6 +465,24 @@ struct VideoThumbnail: View {
         }
     }
     
+    private func loadProjectVideosLocally() async {
+        do {
+            guard let projectId = project?.id else {
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No project ID found"])
+            }
+            
+            let localVideos = try await LocalProjectService.shared.loadAndPrepareVideosLocally(projectId: projectId)
+            // Now `localVideos` is your array of `Video` objects with local file paths
+            DispatchQueue.main.async {
+                self.projectVideos = localVideos
+                self.showEditView = true
+            }
+        } catch {
+            print("❌ Error loading local project videos: \(error)")
+            self.errorMessage = error.localizedDescription
+        }
+    }
+    
     private func loadProjectAndVideos() async {
         print("📝 Starting to load project and videos...")
         do {
@@ -453,6 +492,8 @@ struct VideoThumbnail: View {
             // Fetch project and its videos
             async let projectTask = ProjectService.shared.fetchProject(projectId)
             async let videosTask = VideoViewModel.shared.fetchProjectVideos(projectId)
+//            async let projectTask = LocalProjectService.shared.fetchProject(projectId)
+//            async let videosTask = LocalVideoViewModel.shared.fetchProjectVideos(projectId)
             
             let (project, videos) = try await (projectTask, videosTask)
             
