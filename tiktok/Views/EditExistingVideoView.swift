@@ -26,6 +26,7 @@ struct EditExistingVideoView: UIViewControllerRepresentable {
             self.parent = parent
         }
         
+        
         func videoEditViewControllerDidFail(_ videoEditViewController: VideoEditViewController, error: VideoEditorError) {
             print("❌ Editor error: \(error.localizedDescription)")
             videoEditViewController.dismiss(animated: true)
