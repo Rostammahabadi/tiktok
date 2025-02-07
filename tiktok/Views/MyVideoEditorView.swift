@@ -4,7 +4,17 @@ import Swift
 
 struct MyVideoEditorView: UIViewControllerRepresentable {
     let videoURL: URL
-    let configuration: Configuration
+    var configuration: Configuration = {
+            Configuration { builder in
+                // For instance, set the theme to dark
+                builder.theme = .dark
+                
+                // Other customizations, e.g.:
+                // builder.configureTransformToolController { options in
+                //     options.allowFreeCrop = false
+                // }
+            }
+        }()
     
     func makeUIViewController(context: Context) -> VideoEditViewController {
         // 1. Create your `Video` model

@@ -85,38 +85,31 @@ struct CreateView: View {
                 // Studio Option
                 Button(action: {
                     print("📱 Studio button tapped")
-                    let editor = ShowVideoEditor()
-                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                       let rootViewController = windowScene.windows.first?.rootViewController {
-                        print("🎯 Got root view controller")
-                        editor.presentingViewController = rootViewController
-                        
-                        // Create and configure image picker
-                        let picker = UIImagePickerController()
-                        picker.sourceType = .photoLibrary
-                        picker.mediaTypes = ["public.movie"]
-                        picker.videoQuality = .typeHigh
-                        
-                        // Store delegate in state
-                        pickerDelegate = ImagePickerDelegate(
-                            presentingVC: rootViewController,
-                            completion: { url in
-                                print("🎬 Picker completion called with URL: \(String(describing: url))")
-                                if let videoURL = url {
-                                    print("📹 Got video URL: \(videoURL)")
-                                    DispatchQueue.main.async {
-                                        editor.showVideoEditor(with: videoURL)
-                                    }
-                                }
+                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                           let rootVC = windowScene.windows.first?.rootViewController {
+                            
+                            let picker = UIImagePickerController()
+                            picker.sourceType = .photoLibrary
+                            picker.mediaTypes = ["public.movie"]
+                            picker.videoQuality = .typeHigh
+                            
+                            pickerDelegate = ImagePickerDelegate(presentingVC: rootVC) { url in
+                                // Once the picker is dismissed and we have a video URL
+                                guard let videoURL = url else { return }
+                                
+                                // Wrap MyVideoEditorView in a UIHostingController
+                                let editorHosting = UIHostingController(rootView: MyVideoEditorView(videoURL: videoURL))
+                                editorHosting.modalPresentationStyle = .fullScreen
+                                
+                                // Present the editor
+                                rootVC.present(editorHosting, animated: true)
                             }
-                        )
-                        picker.delegate = pickerDelegate
-                        
-                        // Present picker
-                        print("📤 Presenting picker")
-                        rootViewController.present(picker, animated: true)
-                    }
-                    increaseStreak()
+                            picker.delegate = pickerDelegate
+                            
+                            // Present the picker
+                            rootVC.present(picker, animated: true)
+                        }
+                        increaseStreak()
                 }) {
                     VStack(spacing: 15) {
                         ZStack {
