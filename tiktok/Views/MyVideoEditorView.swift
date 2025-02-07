@@ -7,16 +7,16 @@ import Swift
 struct MyVideoEditorView: UIViewControllerRepresentable {
     let videoURL: URL
     var configuration: Configuration = {
-            Configuration { builder in
-                // For instance, set the theme to dark
-                builder.theme = .dark
-                
-                // Other customizations, e.g.:
-                // builder.configureTransformToolController { options in
-                //     options.allowFreeCrop = false
-                // }
-            }
-        }()
+        Configuration { builder in
+            // For instance, set the theme to dark
+            builder.theme = .dark
+            
+            // Other customizations, e.g.:
+            // builder.configureTransformToolController { options in
+            //     options.allowFreeCrop = false
+            // }
+        }
+    }()
     
     func makeUIViewController(context: Context) -> VideoEditViewController {
         // 1. Create your `Video` model
@@ -96,13 +96,36 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                     let thumbnailUrl = try await ThumbnailService.shared.uploadThumbnail(thumbnail, projectId: projectId)
                     print("✅ Thumbnail generated and uploaded")
                     
+                    // Upload each segment and collect their data
+                    var processedSegments: [[String: Any]] = []
+                    
+                    for (index, (segmentUrl, segmentData)) in segmentUrls.enumerated() {
+                        print("📤 Uploading segment \(index + 1)")
+                        let segmentStorageUrl = try await StorageService.shared.uploadVideo(from: segmentUrl, projectId: projectId)
+                        
+                        var segment = segmentData
+                        print("segment: \(segment)")
+                        segment["url"] = segmentStorageUrl.absoluteString
+                        processedSegments.append(segment)
+                        print("✅ Processed segment \(index + 1)")
+                    }
+                    
+                    // Serialize the editor settings
+                    guard let serializedData = videoEditViewController.serializedSettings,
+                          let serialization = try? JSONSerialization.jsonObject(with: serializedData, options: []) as? [String: Any] else {
+                        print("⚠️ Could not serialize editor settings")
+                        return
+                    }
+                    
                     let project: [String: Any] = [
                         "author_id": userId,
                         "title": "Video Project",
                         "description": "User's video creation",
                         "status": "created",
                         "created_at": FieldValue.serverTimestamp(),
-                        "thumbnail_url": thumbnailUrl.absoluteString
+                        "thumbnail_url": thumbnailUrl.absoluteString,
+                        // "segments": processedSegments,
+                        "serialization": serialization,
                     ]
                     
                     try await projectRef.setData(project)
@@ -112,40 +135,23 @@ struct MyVideoEditorView: UIViewControllerRepresentable {
                     let mainVideoUrl = try await StorageService.shared.uploadVideo(from: exportedUrl, projectId: projectId)
                     print("✅ Uploaded main video")
                     
-                    // Upload each segment and collect their data
-                    var processedSegments: [[String: Any]] = []
                     
-                    for (index, (segmentUrl, segmentData)) in segmentUrls.enumerated() {
-                        print("📤 Uploading segment \(index + 1)")
-                        let segmentStorageUrl = try await StorageService.shared.uploadVideo(from: segmentUrl, projectId: projectId)
+                    // Create video documents for each segment
+                    let videosCollection = db.collection("videos")
+                    for segment in processedSegments {
+                        // Create a new document for each segment
+                        let videoRef = videosCollection.document()
+                        print("📝 Creating video document: \(videoRef.documentID)")
                         
-                        var segment = segmentData
-                        segment["url"] = segmentStorageUrl.absoluteString
-                        processedSegments.append(segment)
-                        print("✅ Processed segment \(index + 1)")
+                        try await videoRef.setData([
+                            "author_id": userId,
+                            "project_id": projectId,
+                            "url": segment["url"] as! String,
+                            "startTime": segment["startTime"] ?? NSNull(),
+                            "endTime": segment["endTime"] ?? NSNull()
+                        ])   
+                        print("✅ Created video document: \(videoRef.documentID)")
                     }
-                    
-                    // Create video document with all processed data
-                    let videoRef = db.collection("videos").document()
-                    
-                    // Serialize the editor settings
-                    guard let serializedData = videoEditViewController.serializedSettings,
-                          let serialization = try? JSONSerialization.jsonObject(with: serializedData, options: []) as? [String: Any] else {
-                        print("⚠️ Could not serialize editor settings")
-                        return
-                    }
-                    
-                    let video: [String: Any] = [
-                        "author_id": userId,
-                        "project_id": projectId,
-                        "exported_file_path": mainVideoUrl.absoluteString,
-                        "segments": processedSegments,
-                        "serialization": serialization,
-                        "saved_at": FieldValue.serverTimestamp()
-                    ]
-                    
-                    try await videoRef.setData(video)
-                    print("✅ Saved video document with all processed segments")
                     
                 } catch {
                     print("❌ Error processing video: \(error.localizedDescription)")
