@@ -119,6 +119,7 @@ struct VideoPlayerView: View {
     @State private var observers: [NSKeyValueObservation] = []
     @State private var isUsingFallback = false
     @State private var isPlaying = false
+    @State private var isReadyToPlay = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -153,8 +154,8 @@ struct VideoPlayerView: View {
                         CustomVideoPlayer(player: player)
                             .frame(width: geometry.size.width, height: geometry.size.height)
                         
-                        // Play button overlay
-                        if !isPlaying {
+                        // Play button overlay - only show when video is ready but not playing
+                        if !isPlaying && isReadyToPlay {
                             Circle()
                                 .fill(Color.black.opacity(0.5))
                                 .frame(width: 80, height: 80)
@@ -168,10 +169,11 @@ struct VideoPlayerView: View {
                     .onTapGesture {
                         if isPlaying {
                             player.pause()
-                        } else {
+                            isPlaying = false
+                        } else if isReadyToPlay {
                             player.play()
+                            isPlaying = true
                         }
-                        isPlaying.toggle()
                     }
                 }
             }
@@ -180,9 +182,11 @@ struct VideoPlayerView: View {
         .onChange(of: isActive) { newValue in
             if newValue {
                 print("📱 Video became active")
-                player?.seek(to: .zero)
-                player?.play()
-                isPlaying = true
+                if isReadyToPlay {
+                    player?.seek(to: .zero)
+                    player?.play()
+                    isPlaying = true
+                }
             } else {
                 print("📱 Video became inactive")
                 player?.pause()
@@ -201,6 +205,8 @@ struct VideoPlayerView: View {
         // Clear previous state
         error = nil
         isLoading = true
+        isReadyToPlay = false
+        isPlaying = false
         player?.pause()
         player = nil
         
@@ -218,6 +224,20 @@ struct VideoPlayerView: View {
             let playerItem = AVPlayerItem(asset: asset)
             let newPlayer = AVPlayer(playerItem: playerItem)
             
+            // Observe when the item is ready to play
+            let observation = playerItem.observe(\.status) { item, _ in
+                if item.status == .readyToPlay {
+                    Task { @MainActor in
+                        self.isReadyToPlay = true
+                        if self.isActive {
+                            self.isPlaying = true
+                            newPlayer.play()
+                        }
+                    }
+                }
+            }
+            observers.append(observation)
+            
             await MainActor.run {
                 self.player = newPlayer
                 self.isLoading = false
@@ -225,7 +245,6 @@ struct VideoPlayerView: View {
             
             // Set up player
             newPlayer.actionAtItemEnd = .none
-            newPlayer.play()
             
             // Add observer for playback ended
             NotificationCenter.default.addObserver(
@@ -240,6 +259,7 @@ struct VideoPlayerView: View {
             await MainActor.run {
                 self.error = error
                 self.isLoading = false
+                self.isReadyToPlay = false
             }
         }
     }
