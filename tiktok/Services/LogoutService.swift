@@ -7,17 +7,22 @@ class LogoutService {
     private init() {}
     
     func logout() async throws {
-        do {
-            // Sign out from Firebase Auth
-            try Auth.auth().signOut()
-            
-            // Clear local user data
-            UserDefaultsManager.shared.clearCurrentUser()
-            
-            print("✅ User successfully logged out and local data cleared")
-        } catch {
-            print("❌ Error logging out: \(error.localizedDescription)")
-            throw error
+        // 1. Clear local storage
+        let docsURL = try FileManager.default.url(
+            for: .documentDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: false
+        )
+        let localProjectsDir = docsURL.appendingPathComponent("LocalProjects")
+        
+        if FileManager.default.fileExists(atPath: localProjectsDir.path) {
+            try FileManager.default.removeItem(at: localProjectsDir)
+            print("🗑️ Cleared local storage")
         }
+        
+        // 2. Sign out from Firebase
+        try Auth.auth().signOut()
+        print("👋 User signed out")
     }
 }

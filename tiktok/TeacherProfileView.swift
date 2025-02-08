@@ -9,47 +9,46 @@ class ProjectViewModel: ObservableObject {
     @Published var isLoading = false
     
     func fetchProjects() async {
+        print("\n🎬 TeacherProfileView: Starting to fetch projects")
+        
         await MainActor.run { 
             isLoading = true
-            // Clear existing thumbnails to force a fresh load
             thumbnails.removeAll()
+            print("   Cleared existing thumbnails")
         }
         
         do {
-            let docsURL = try FileManager.default.url(
-                for: .documentDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: false
-            )
-            print("📂 Documents Directory: \(docsURL.path)")
-            
             // 1. Try to load from local storage first
-            var fetchedProjects: [Project] = []
-            do {
-                print("📱 Loading projects from local storage...")
+            print("📱 TeacherProfileView: Attempting to load from local storage")
+            var fetchedProjects = try await LocalProjectService.shared.loadAllLocalProjects()
+            
+            // If no local projects found, sync from Firebase
+            if fetchedProjects.isEmpty {
+                print("⚠️ TeacherProfileView: No local projects found")
+                print("🔄 TeacherProfileView: Starting Firebase sync...")
+                try await VideoSyncService.shared.syncUserContent()
+                print("   Sync completed, loading local projects again")
                 fetchedProjects = try await LocalProjectService.shared.loadAllLocalProjects()
-                print("✅ Found \(fetchedProjects.count) local projects")
-            } catch {
-                print("⚠️ Failed to load local projects: \(error.localizedDescription)")
-                print("🔄 Falling back to Firestore...")
-                // Fallback to Firestore if local loading fails
-                fetchedProjects = try await ProjectService.shared.fetchUserProjects()
+            } else {
+                print("✅ TeacherProfileView: Found \(fetchedProjects.count) local projects")
             }
             
             // 2. Load all thumbnails in parallel
             let projectIds = fetchedProjects.compactMap { $0.id }
-            print("🔄 Refreshing thumbnails for \(projectIds.count) projects...")
+            print("\n🖼️ TeacherProfileView: Loading thumbnails for \(projectIds.count) projects")
             let loadedThumbnails = await LocalThumbnailService.shared.loadThumbnails(projectIds: projectIds)
+            print("   Loaded \(loadedThumbnails.count) thumbnails")
             
             // 3. Update UI state
             await MainActor.run {
+                print("\n📱 TeacherProfileView: Updating UI")
                 self.projects = fetchedProjects
                 self.thumbnails = loadedThumbnails
                 self.isLoading = false
+                print("✅ TeacherProfileView: UI update complete")
             }
         } catch {
-            print("❌ Error: \(error.localizedDescription)")
+            print("❌ TeacherProfileView Error: \(error.localizedDescription)")
             await MainActor.run { self.isLoading = false }
         }
     }
