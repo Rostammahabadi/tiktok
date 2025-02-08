@@ -369,18 +369,19 @@ struct SignupView: View {
     @State private var confirmPassword: String = ""
     @State private var errorMessage: String?
     @State private var isLoading: Bool = false
-    @State private var showConfetti: Bool = false
+    @State private var showUsernameSelection: Bool = false
+    @State private var authResult: AuthDataResult?
     @FocusState private var focusedField: Field?
+    
+    enum Field {
+        case email, password, confirmPassword
+    }
     
     private let gradientColors: [Color] = [
         Color(red: 0.98, green: 0.4, blue: 0.4),   // Playful red
         Color(red: 0.98, green: 0.8, blue: 0.3),   // Warm yellow
         Color(red: 0.4, green: 0.8, blue: 0.98)    // Sky blue
     ]
-    
-    enum Field {
-        case email, password, confirmPassword
-    }
     
     var body: some View {
         NavigationView {
@@ -456,17 +457,17 @@ struct SignupView: View {
                             ZStack {
                                 if isLoading {
                                     ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.2, green: 0.2, blue: 0.3)))
+                                        .progressViewStyle(CircularProgressViewStyle(tint: Theme.primaryColor))
                                 } else {
                                     HStack(spacing: 10) {
                                         Image(systemName: "person.badge.plus")
                                             .font(.title3)
-                                        Text("Create Account")
+                                        Text("Continue")
                                             .font(.headline)
                                     }
                                 }
                             }
-                            .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.3))
+                            .foregroundColor(Theme.primaryColor)
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
                             .background(
@@ -482,10 +483,6 @@ struct SignupView: View {
                         Spacer(minLength: 30)
                     }
                 }
-                
-                // Confetti overlay
-                ConfettiView(isActive: $showConfetti, duration: 3)
-                    .allowsHitTesting(false)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -496,6 +493,11 @@ struct SignupView: View {
                             .foregroundColor(.white)
                     }
                 }
+            }
+        }
+        .fullScreenCover(isPresented: $showUsernameSelection) {
+            if let authResult = authResult {
+                UsernameSelectionView(isLoggedIn: $isLoggedIn, authResult: authResult)
             }
         }
         .onAppear {
@@ -514,7 +516,7 @@ struct SignupView: View {
             return
         }
         
-        Auth.auth().createUser(withEmail: email, password: password) { [self] result, error in
+        Auth.auth().createUser(withEmail: email, password: password) { result, error in
             if let error = error {
                 isLoading = false
                 errorMessage = error.localizedDescription
@@ -527,31 +529,10 @@ struct SignupView: View {
                 return
             }
             
-            // Create user in Firestore
-            Task {
-                do {
-                    try await UserService.shared.createUserAfterAuthentication(authResult: result, username: email)
-                    
-                    DispatchQueue.main.async {
-                        // Show confetti on successful signup
-                        withAnimation {
-                            showConfetti = true
-                        }
-                        
-                        // Delay dismissal to show confetti
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                            isLoading = false
-                            isLoggedIn = true
-                            dismiss()
-                        }
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        isLoading = false
-                        errorMessage = "Failed to create user profile: \(error.localizedDescription)"
-                    }
-                }
-            }
+            // Store the auth result and show username selection
+            authResult = result
+            isLoading = false
+            showUsernameSelection = true
         }
     }
 }
