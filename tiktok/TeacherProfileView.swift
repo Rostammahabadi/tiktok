@@ -227,6 +227,8 @@ struct ProjectThumbnail: View {
     @State private var showEditView = false
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showShareSheet = false
+    @State private var shareURL: URL?
     
     var body: some View {
         VStack(spacing: 8) {
@@ -259,15 +261,8 @@ struct ProjectThumbnail: View {
                 }
             }
             .frame(width: 150, height: 150)
-            
-            Text(project.title ?? "Untitled")
-                .font(.caption)
-                .foregroundColor(Theme.textColor)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .frame(height: 32)
         }
-        .frame(width: 170, height: 190)
+        .frame(width: 170, height: 150)
         .contentShape(Rectangle())  // Make entire area tappable
         .contextMenu {
             Button {
@@ -278,6 +273,14 @@ struct ProjectThumbnail: View {
             } label: {
                 Label("Edit", systemImage: "pencil")
             }
+            
+            Button {
+                Task {
+                    await shareVideo()
+                }
+            } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
         }
         .padding(.vertical, 8)
         
@@ -285,6 +288,13 @@ struct ProjectThumbnail: View {
         .fullScreenCover(isPresented: $showEditView) {
             if let projectVideos = projectVideos {
                 EditExistingVideoView(videoURLs: projectVideos, project: project)
+            }
+        }
+        
+        // Share sheet
+        .sheet(isPresented: $showShareSheet) {
+            if let shareURL = shareURL {
+                ShareSheet(activityItems: [shareURL])
             }
         }
         
@@ -407,4 +417,70 @@ struct ProjectThumbnail: View {
         try data.write(to: tempURL)
         return tempURL
     }
+    
+    private func shareVideo() async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            guard let projectId = project.id else {
+                throw NSError(domain: "", code: -1,
+                            userInfo: [NSLocalizedDescriptionKey: "No project ID found"])
+            }
+            
+            print("📝 Loading video for sharing: \(projectId)")
+            
+            // Get path to main video (stored as index "0" in videos folder)
+            let docsURL = try FileManager.default.url(
+                for: .documentDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: false
+            )
+            
+            let mainVideoPath = docsURL
+                .appendingPathComponent("LocalProjects")
+                .appendingPathComponent(projectId)
+                .appendingPathComponent("videos")
+                .appendingPathComponent("0") // Main video is always "0"
+            
+            // Verify the file exists
+            guard FileManager.default.fileExists(atPath: mainVideoPath.path) else {
+                throw NSError(domain: "", code: -1,
+                            userInfo: [NSLocalizedDescriptionKey: "Video file not found"])
+            }
+            
+            // Create a temporary copy with proper extension (.mov since that's what we export as)
+            let tempDir = FileManager.default.temporaryDirectory
+            let tempVideoPath = tempDir.appendingPathComponent("\(UUID().uuidString).mov")
+            try FileManager.default.copyItem(at: mainVideoPath, to: tempVideoPath)
+            
+            await MainActor.run {
+                self.shareURL = tempVideoPath
+                self.showShareSheet = true
+                self.isLoading = false
+            }
+        } catch {
+            print("❌ Error preparing video for sharing: \(error.localizedDescription)")
+            await MainActor.run {
+                self.errorMessage = "Failed to prepare video for sharing"
+                self.isLoading = false
+            }
+        }
+    }
+}
+
+// Share Sheet using UIActivityViewController
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(
+            activityItems: activityItems,
+            applicationActivities: nil
+        )
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

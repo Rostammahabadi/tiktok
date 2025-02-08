@@ -12,6 +12,7 @@ struct LocalProject: Codable {
     let projectId: String
     let authorId: String
     let createdAt: Date
+    let isDeleted: Bool
     
     // The main video info
     var mainVideoId: String

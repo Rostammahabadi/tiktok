@@ -29,7 +29,8 @@ class ProjectService {
             title: title,
             description: description,
             thumbnailUrl: thumbnailUrl,
-            status: .created
+            status: .created,
+            isDeleted: false
         )
         
         do {
@@ -37,7 +38,8 @@ class ProjectService {
             var data: [String: Any] = [
                 "author_id": userId,
                 "title": title,
-                "status": Project.ProjectStatus.created.rawValue
+                "status": Project.ProjectStatus.created.rawValue,
+                "is_deleted": false
             ]
             
             if let description = description {
@@ -109,6 +111,7 @@ class ProjectService {
                         }
                         return nil
                     }(),
+                    isDeleted: data["is_deleted"] as? Bool ?? false,
                     createdAt: (data["created_at"] as? Timestamp)?.dateValue()
                 )
             }
@@ -168,6 +171,7 @@ class ProjectService {
             thumbnailUrl: data["thumbnail_url"] as? String,
             status: Project.ProjectStatus(rawValue: data["status"] as? String ?? "") ?? .created,
             serializedSettings: serializedSettings,
+            isDeleted: data["is_deleted"] as? Bool ?? false,
             createdAt: (data["created_at"] as? Timestamp)?.dateValue()
         )
         

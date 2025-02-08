@@ -9,6 +9,7 @@ struct Project: Identifiable, Codable {
     let thumbnailUrl: String?
     let status: ProjectStatus
     let serializedSettings: Data?
+    let isDeleted: Bool
     @ServerTimestamp var createdAt: Timestamp?
     
     enum ProjectStatus: String, Codable {
@@ -25,10 +26,11 @@ struct Project: Identifiable, Codable {
         case thumbnailUrl = "thumbnail_url"
         case status
         case serializedSettings = "serialization"
+        case isDeleted = "is_deleted"
         case createdAt = "created_at"
     }
     
-    init(id: String? = nil, authorId: String, title: String, description: String? = nil, thumbnailUrl: String? = nil, status: ProjectStatus, serializedSettings: Data? = nil, createdAt: Date? = nil) {
+    init(id: String? = nil, authorId: String, title: String, description: String? = nil, thumbnailUrl: String? = nil, status: ProjectStatus, serializedSettings: Data? = nil, isDeleted: Bool = false, createdAt: Date? = nil) {
         self.id = id
         self.authorId = authorId
         self.title = title
@@ -36,6 +38,7 @@ struct Project: Identifiable, Codable {
         self.thumbnailUrl = thumbnailUrl
         self.status = status
         self.serializedSettings = serializedSettings
+        self.isDeleted = isDeleted
         if let createdAt = createdAt {
             self.createdAt = Timestamp(date: createdAt)
         }

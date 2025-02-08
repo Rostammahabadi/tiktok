@@ -108,6 +108,7 @@ class LocalProjectService {
                         }
                         return nil
                     }(),
+                    isDeleted: localProject.isDeleted,
                     createdAt: localProject.createdAt
                 )
                 projects.append(project)

@@ -114,6 +114,7 @@ class SaveVideoToLocalURL {
             projectId: projectId,
             authorId: authorId,
             createdAt: Date(),
+            isDeleted: false,
             mainVideoId: mainVideoId,
             mainVideoFilePath: "videos/\(mainIndex)", // e.g. “videos/0”
             mainThumbnailFilePath: thumbnailFilePath,
