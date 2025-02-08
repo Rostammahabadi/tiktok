@@ -186,6 +186,7 @@ struct LoginView: View {
     @State private var errorMessage: String?
     @State private var isLoading: Bool = false
     @State private var isAnimating: Bool = false
+    @StateObject private var biometricAuth = BiometricAuthService()
     @FocusState private var focusedField: Field?
     
     enum Field {
@@ -236,7 +237,34 @@ struct LoginView: View {
                                 .foregroundColor(.white)
                                 .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
                         }
-                        .padding(.top, 60) // Add more top padding to prevent content from being too high
+                        .padding(.top, 60)
+                        
+                        // Face ID Button (only show if available)
+                        if biometricAuth.biometricType == .faceID {
+                            Button(action: {
+                                authenticateWithFaceID()
+                            }) {
+                                HStack {
+                                    Image(systemName: "faceid")
+                                        .font(.title2)
+                                    Text("Sign in with Face ID")
+                                }
+                                .foregroundColor(.white)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(Color.blue.opacity(0.3))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                                )
+                            }
+                            .padding(.horizontal)
+                            
+                            Text("or use your email")
+                                .foregroundColor(.white.opacity(0.8))
+                                .font(.subheadline)
+                        }
                         
                         // Login form with improved styling
                         VStack(spacing: 20) {
@@ -249,13 +277,10 @@ struct LoginView: View {
                                 CustomTextField(
                                     placeholder: "Email",
                                     text: $email,
-                                    isSecure: false,
-                                    style: .dark
+                                    isSecure: false
                                 )
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
                                 .focused($focusedField, equals: .email)
-                                .keyboardType(.emailAddress)
+                                .submitLabel(.next)
                             }
                             
                             // Password field with icon
@@ -267,64 +292,42 @@ struct LoginView: View {
                                 CustomTextField(
                                     placeholder: "Password",
                                     text: $password,
-                                    isSecure: true,
-                                    style: .dark
+                                    isSecure: true
                                 )
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
                                 .focused($focusedField, equals: .password)
+                                .submitLabel(.go)
                             }
-                            
-                            if let errorMessage = errorMessage {
-                                Text(errorMessage)
-                                    .font(.caption)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal)
-                                    .padding(.vertical, 8)
-                                    .background(Color.red.opacity(0.3))
-                                    .cornerRadius(8)
-                            }
-                            
-                            // Login button with animation
-                            Button(action: login) {
-                                ZStack {
-                                    if isLoading {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.2, green: 0.2, blue: 0.3)))
-                                    } else {
-                                        HStack {
-                                            Image(systemName: "arrow.right.circle.fill")
-                                                .font(.title3)
-                                            Text("Let's Go!")
-                                                .font(.headline)
-                                        }
-                                    }
-                                }
-                                .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.3))
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 50)
-                                .background(Color.white)
-                                .cornerRadius(25)
-                                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
-                            }
-                            .disabled(isLoading || email.isEmpty || password.isEmpty)
-                            .scaleEffect(isLoading ? 0.95 : 1.0)
-                            .animation(.easeInOut(duration: 0.2), value: isLoading)
-                            
-                            // Forgot Password button with improved styling
-                            Button(action: {
-                                // Implement "Forgot Password?" functionality
-                            }) {
-                                Text("Forgot Password?")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white)
-                                    .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
-                            }
-                            .padding(.top, 10)
                         }
                         .padding(.horizontal)
                         
-                        Spacer(minLength: 50) // Add minimum spacing at the bottom
+                        if let errorMessage = errorMessage {
+                            Text(errorMessage)
+                                .foregroundColor(.red)
+                                .font(.caption)
+                                .padding(.horizontal)
+                        }
+                        
+                        // Login button
+                        Button(action: login) {
+                            ZStack {
+                                Text("Sign In")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .opacity(isLoading ? 0 : 1)
+                                
+                                if isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                }
+                            }
+                        }
+                        .disabled(isLoading)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.blue)
+                        .cornerRadius(12)
+                        .padding(.horizontal)
+                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                     }
                     .padding(.horizontal, 20)
                 }
@@ -334,10 +337,8 @@ struct LoginView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { dismiss() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
+                        Image(systemName: "xmark")
                             .foregroundColor(.white)
-                            .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
                     }
                 }
             }
@@ -345,57 +346,54 @@ struct LoginView: View {
         .onAppear {
             isAnimating = true
             focusedField = .email
-//            isLoggedIn = true
+            // Check if we have stored credentials for Face ID
+            checkStoredCredentials()
+        }
+    }
+    
+    private func authenticateWithFaceID() {
+        Task {
+            if await biometricAuth.authenticateUser() {
+                // Get stored credentials
+                if let storedEmail = UserDefaults.standard.string(forKey: "faceID_email"),
+                   let storedPassword = KeychainManager.shared.getPassword(for: storedEmail) {
+                    email = storedEmail
+                    password = storedPassword
+                    login()
+                }
+            }
+        }
+    }
+    
+    private func checkStoredCredentials() {
+        // Check if we have stored credentials for Face ID
+        if UserDefaults.standard.bool(forKey: "useFaceID"),
+           let _ = UserDefaults.standard.string(forKey: "faceID_email"),
+           let _ = KeychainManager.shared.getPassword(for: email) {
+            // Automatically prompt for Face ID
+            authenticateWithFaceID()
         }
     }
     
     func login() {
-        print("🔐 Starting login process...")
-        errorMessage = nil
         isLoading = true
+        errorMessage = nil
         
         Auth.auth().signIn(withEmail: email, password: password) { result, error in
+            isLoading = false
+            
             if let error = error {
-                isLoading = false
                 errorMessage = error.localizedDescription
-                return
-            }
-            
-            guard let result = result else {
-                isLoading = false
-                errorMessage = "Failed to get authentication result"
-                return
-            }
-            
-            // Fetch user data from Firestore and save to UserDefaults
-            Task {
-                do {
-                    if let user = try await UserService.shared.getUser(userId: result.user.uid) {
-                        // Save user data to UserDefaults
-                        UserDefaultsManager.shared.saveCurrentUser(
-                            id: result.user.uid,
-                            email: user.email,
-                            username: user.username,
-                            bio: user.bio
-                        )
-                        
-                        DispatchQueue.main.async {
-                            isLoading = false
-                            isLoggedIn = true
-                            dismiss()
-                        }
-                    } else {
-                        DispatchQueue.main.async {
-                            isLoading = false
-                            errorMessage = "Failed to fetch user profile"
-                        }
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        isLoading = false
-                        errorMessage = "Failed to fetch user profile: \(error.localizedDescription)"
-                    }
+            } else {
+                // Store credentials for Face ID if not already stored
+                if biometricAuth.biometricType == .faceID {
+                    UserDefaults.standard.set(true, forKey: "useFaceID")
+                    UserDefaults.standard.set(email, forKey: "faceID_email")
+                    KeychainManager.shared.savePassword(password, for: email)
                 }
+                
+                isLoggedIn = true
+                dismiss()
             }
         }
     }
@@ -411,15 +409,18 @@ struct SignupView: View {
     @State private var confirmPassword: String = ""
     @State private var errorMessage: String?
     @State private var isLoading: Bool = false
-    @State private var showUsernameSelection: Bool = false
+    @State private var isAnimating: Bool = false
+    @State private var showUsernameSelection = false
     @State private var authResult: AuthDataResult?
+    @State private var showFaceIDPrompt = false
+    @StateObject private var biometricAuth = BiometricAuthService()
     @FocusState private var focusedField: Field?
     
     enum Field {
         case email, password, confirmPassword
     }
     
-    private let gradientColors: [Color] = [
+    let gradientColors: [Color] = [
         Color(red: 0.98, green: 0.4, blue: 0.4),   // Playful red
         Color(red: 0.98, green: 0.8, blue: 0.3),   // Warm yellow
         Color(red: 0.4, green: 0.8, blue: 0.98)    // Sky blue
@@ -544,6 +545,16 @@ struct SignupView: View {
                 }
             }
         }
+        .alert("Enable Face ID?", isPresented: $showFaceIDPrompt) {
+            Button("Not Now", role: .cancel) {
+                proceedToUsernameSelection()
+            }
+            Button("Enable") {
+                setupFaceID()
+            }
+        } message: {
+            Text("Would you like to use Face ID to quickly and securely sign in to TeacherTok?")
+        }
         .fullScreenCover(isPresented: $showUsernameSelection) {
             if let authResult = authResult {
                 ProfileSetupView(isLoggedIn: $isLoggedIn, authResult: authResult)
@@ -554,34 +565,57 @@ struct SignupView: View {
         }
     }
     
+    private func setupFaceID() {
+        Task {
+            if await biometricAuth.authenticateUser() {
+                // Store credentials for Face ID
+                UserDefaults.standard.set(true, forKey: "useFaceID")
+                UserDefaults.standard.set(email, forKey: "faceID_email")
+                KeychainManager.shared.savePassword(password, for: email)
+                
+                // Proceed to username selection
+                proceedToUsernameSelection()
+            } else {
+                // If Face ID setup fails, just proceed to username selection
+                proceedToUsernameSelection()
+            }
+        }
+    }
+    
+    private func proceedToUsernameSelection() {
+        showUsernameSelection = true
+    }
+    
     func signup() {
         print("📝 Starting signup process...")
         errorMessage = nil
         isLoading = true
         
         guard password == confirmPassword else {
-            errorMessage = "Passwords don't match"
+            errorMessage = "Passwords do not match"
             isLoading = false
             return
         }
         
         Auth.auth().createUser(withEmail: email, password: password) { result, error in
+            isLoading = false
+            
             if let error = error {
-                isLoading = false
                 errorMessage = error.localizedDescription
                 return
             }
             
-            guard let result = result else {
-                isLoading = false
-                errorMessage = "Failed to get authentication result"
-                return
+            if let result = result {
+                self.authResult = result
+                
+                // Only show Face ID prompt if the device supports it
+                if biometricAuth.biometricType == .faceID {
+                    showFaceIDPrompt = true
+                } else {
+                    // If no Face ID support, proceed directly to username selection
+                    proceedToUsernameSelection()
+                }
             }
-            
-            // Store the auth result and show username selection
-            authResult = result
-            isLoading = false
-            showUsernameSelection = true
         }
     }
 }
