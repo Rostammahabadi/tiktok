@@ -33,19 +33,40 @@ class ProjectViewModel: ObservableObject {
                 print("✅ TeacherProfileView: Found \(fetchedProjects.count) local projects")
             }
             
-            // 2. Load all thumbnails in parallel
+            // Update projects immediately so UI can show placeholders
+            await MainActor.run {
+                self.projects = fetchedProjects
+            }
+            
+            // 2. Load all thumbnails in parallel with retries
             let projectIds = fetchedProjects.compactMap { $0.id }
             print("\n🖼️ TeacherProfileView: Loading thumbnails for \(projectIds.count) projects")
-            let loadedThumbnails = await LocalThumbnailService.shared.loadThumbnails(projectIds: projectIds)
-            print("   Loaded \(loadedThumbnails.count) thumbnails")
             
-            // 3. Update UI state
-            await MainActor.run {
-                print("\n📱 TeacherProfileView: Updating UI")
-                self.projects = fetchedProjects
-                self.thumbnails = loadedThumbnails
-                self.isLoading = false
-                print("✅ TeacherProfileView: UI update complete")
+            // Try loading thumbnails up to 3 times with a delay
+            for attempt in 1...3 {
+                let loadedThumbnails = await LocalThumbnailService.shared.loadThumbnails(projectIds: projectIds)
+                print("   Attempt \(attempt): Loaded \(loadedThumbnails.count) thumbnails")
+                
+                if loadedThumbnails.count == projectIds.count {
+                    // All thumbnails loaded successfully
+                    await MainActor.run {
+                        self.thumbnails = loadedThumbnails
+                        self.isLoading = false
+                        print("✅ TeacherProfileView: All thumbnails loaded successfully")
+                    }
+                    return
+                } else if attempt < 3 {
+                    // Wait a bit before retrying
+                    try? await Task.sleep(nanoseconds: UInt64(1_000_000_000)) // 1 second delay
+                    print("   Retrying thumbnail load...")
+                } else {
+                    // Final attempt, update with whatever we have
+                    await MainActor.run {
+                        self.thumbnails = loadedThumbnails
+                        self.isLoading = false
+                        print("⚠️ TeacherProfileView: Some thumbnails failed to load")
+                    }
+                }
             }
         } catch {
             print("❌ TeacherProfileView Error: \(error.localizedDescription)")
