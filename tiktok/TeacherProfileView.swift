@@ -357,12 +357,12 @@ struct ProjectThumbnail: View {
             print("📝 Loading videos locally for project: \(projectId)")
             // 1) Load local videos from /Documents/LocalProjects
             let localVideos = try await LocalProjectService.shared.loadAndPrepareVideosLocally(projectId: projectId)
-            print("✅ Found \(localVideos.count) videos")
+            print("✅ Found \(localVideos.videos.count) videos")
             
             // 2) OPTIONAL: If those localVideos are *actually remote URLs*, you can
             //    download them. Otherwise if they are already local paths, skip.
             var finalLocalVideos: [Video] = []
-            for var video in localVideos {
+            for var video in localVideos.videos {
                 if let remoteURL = video.urlValue {
                     print("⬇️ Downloading video: \(video.id)")
                     let localURL = try await downloadVideo(remoteURL: remoteURL)

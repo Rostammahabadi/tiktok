@@ -39,13 +39,22 @@ class LocalProjectService {
         return projectBaseURL.appendingPathComponent(relativePath)
     }
     
-    /// Convert each LocalSegment into your domain `Video` object
+    /// Convert each LocalSegment into your domain `Video` object and return serialized settings
     /// Only returns segment videos, not the main video
-    func loadAndPrepareVideosLocally(projectId: String) async throws -> [Video] {
+    func loadAndPrepareVideosLocally(projectId: String) async throws -> (videos: [Video], serializedSettings: Data?) {
         let localProject = try loadLocalProject(projectId: projectId)
         
+        // Convert serialization from [String: AnyCodable]? to Data?
+        let serializedSettings: Data?
+        if let serialization = localProject.serialization,
+           let dataDict = serialization["data"]?.value as? [String: Any] {
+            serializedSettings = try? JSONSerialization.data(withJSONObject: dataDict)
+        } else {
+            serializedSettings = nil
+        }
+        
         // Only convert and return the segments
-        return localProject.segments.map { seg in
+        let videos = localProject.segments.map { seg in
             Video(
                 id: seg.segmentId,
                 authorId: localProject.authorId,
@@ -58,5 +67,7 @@ class LocalProjectService {
                 isDeleted: false
             )
         }
+        
+        return (videos: videos, serializedSettings: serializedSettings)
     }
 }

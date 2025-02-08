@@ -146,7 +146,7 @@ struct EditExistingVideoView: UIViewControllerRepresentable {
         
         // Create editor with configuration
         let videoEditVC: VideoEditViewController
-        
+        print(project)
         if let serializedSettings = project.serializedSettings {
             // Deserialize the saved settings
             let deserializationResult = Deserializer.deserialize(

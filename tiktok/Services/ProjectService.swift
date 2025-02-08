@@ -103,6 +103,12 @@ class ProjectService {
                     description: data["description"] as? String,
                     thumbnailUrl: data["thumbnail_url"] as? String,
                     status: Project.ProjectStatus(rawValue: data["status"] as? String ?? "") ?? .created,
+                    serializedSettings: {
+                        if let serialization = data["serialization"] as? [String: Any] {
+                            return try? JSONSerialization.data(withJSONObject: serialization)
+                        }
+                        return nil
+                    }(),
                     createdAt: (data["created_at"] as? Timestamp)?.dateValue()
                 )
             }
