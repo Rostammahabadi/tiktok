@@ -369,7 +369,14 @@ struct SignupView: View {
     @State private var confirmPassword: String = ""
     @State private var errorMessage: String?
     @State private var isLoading: Bool = false
+    @State private var showConfetti: Bool = false
     @FocusState private var focusedField: Field?
+    
+    private let gradientColors: [Color] = [
+        Color(red: 0.98, green: 0.4, blue: 0.4),   // Playful red
+        Color(red: 0.98, green: 0.8, blue: 0.3),   // Warm yellow
+        Color(red: 0.4, green: 0.8, blue: 0.98)    // Sky blue
+    ]
     
     enum Field {
         case email, password, confirmPassword
@@ -378,132 +385,167 @@ struct SignupView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Dark gradient background for consistency
-                LinearGradient(gradient: Gradient(colors: [Color.black, Color.gray.opacity(0.8)]),
-                               startPoint: .topLeading,
-                               endPoint: .bottomTrailing)
+                // Animated gradient background
+                LinearGradient(gradient: Gradient(colors: gradientColors),
+                             startPoint: .topLeading,
+                             endPoint: .bottomTrailing)
                     .ignoresSafeArea()
+                    .overlay(
+                        Circle()
+                            .fill(Color.white.opacity(0.1))
+                            .frame(width: 200, height: 200)
+                            .blur(radius: 10)
+                            .offset(x: 150, y: -200)
+                    )
                 
-                VStack(spacing: 20) {
-                    CustomTextField(
-                        placeholder: "Email",
-                        text: $email,
-                        contentType: .username
-                    )
-                    .focused($focusedField, equals: .email)
-                    .keyboardType(.emailAddress)
-                    
-                    CustomTextField(
-                        placeholder: "Password",
-                        text: $password,
-                        contentType: .password,
-                        isSecure: true
-                    )
-                    .focused($focusedField, equals: .password)
-                    
-                    CustomTextField(
-                        placeholder: "Confirm Password",
-                        text: $confirmPassword,
-                        contentType: .password,
-                        isSecure: true
-                    )
-                    .focused($focusedField, equals: .confirmPassword)
-                    
-                    if let errorMessage = errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
-                    
-                    Button(action: signup) {
-                        if isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.white)
-                                .cornerRadius(10)
-                                .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
-                        } else {
-                            Text("Sign up")
-                                .font(.headline)
-                                .foregroundColor(.black)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.white)
-                                .cornerRadius(10)
-                                .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
+                ScrollView {
+                    VStack(spacing: 25) {
+                        // Welcome animation
+                        Image(systemName: "graduationcap.fill")
+                            .font(.system(size: 60))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                            .padding(.top, 40)
+                        
+                        Text("Join TeacherTok")
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                        
+                        // Input fields with improved styling
+                        VStack(spacing: 20) {
+                            CustomTextField(
+                                placeholder: "Email",
+                                text: $email,
+                                contentType: .username
+                            )
+                            .focused($focusedField, equals: .email)
+                            .keyboardType(.emailAddress)
+                            
+                            CustomTextField(
+                                placeholder: "Password",
+                                text: $password,
+                                contentType: .password,
+                                isSecure: true
+                            )
+                            .focused($focusedField, equals: .password)
+                            
+                            CustomTextField(
+                                placeholder: "Confirm Password",
+                                text: $confirmPassword,
+                                contentType: .password,
+                                isSecure: true
+                            )
+                            .focused($focusedField, equals: .confirmPassword)
                         }
+                        .padding(.horizontal, 20)
+                        
+                        if let errorMessage = errorMessage {
+                            Text(errorMessage)
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 10)
+                                .background(Color.red.opacity(0.8))
+                                .cornerRadius(10)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                        
+                        // Sign up button with loading state
+                        Button(action: signup) {
+                            ZStack {
+                                if isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.2, green: 0.2, blue: 0.3)))
+                                } else {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "person.badge.plus")
+                                            .font(.title3)
+                                        Text("Create Account")
+                                            .font(.headline)
+                                    }
+                                }
+                            }
+                            .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.3))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(
+                                RoundedRectangle(cornerRadius: 25)
+                                    .fill(Color.white)
+                            )
+                            .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+                        }
+                        .disabled(isLoading || email.isEmpty || password.isEmpty || confirmPassword.isEmpty)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 10)
+                        
+                        Spacer(minLength: 30)
                     }
-                    .disabled(isLoading || email.isEmpty || password.isEmpty || confirmPassword.isEmpty)
                 }
-                .padding()
-                .padding(.horizontal, 30)
+                
+                // Confetti overlay
+                ConfettiView(isActive: $showConfetti, duration: 3)
+                    .allowsHitTesting(false)
             }
-            .navigationTitle("Sign up")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title3)
+                            .foregroundColor(.white)
                     }
-                    .foregroundColor(.white)
                 }
             }
         }
+        .onAppear {
+            focusedField = .email
+        }
     }
-    
-    // MARK: - Firebase Signup Function
     
     func signup() {
         print("📝 Starting signup process...")
         errorMessage = nil
+        isLoading = true
         
         guard password == confirmPassword else {
-            let error = "Passwords do not match."
-            print("❌ Signup validation failed: \(error)")
-            errorMessage = error
+            errorMessage = "Passwords don't match"
+            isLoading = false
             return
         }
-        
-        print("📝 Attempting to create Firebase Auth user with email: \(email)")
-        isLoading = true
         
         Auth.auth().createUser(withEmail: email, password: password) { [self] result, error in
             if let error = error {
                 isLoading = false
-                print("❌ Firebase Auth creation failed")
-                print("❌ Error creating user: \(error.localizedDescription)")
-                print("❌ Error details: \(error)")
                 errorMessage = error.localizedDescription
                 return
             }
             
-            print("✅ Firebase Auth user created successfully")
-            
-            // Create user in Firestore
             guard let result = result else {
                 isLoading = false
-                let error = "Failed to get authentication result"
-                print("❌ \(error)")
-                errorMessage = error
+                errorMessage = "Failed to get authentication result"
                 return
             }
             
-            print("📝 Starting Firestore user creation for Auth ID: \(result.user.uid)")
-            
+            // Create user in Firestore
             Task {
                 do {
                     try await UserService.shared.createUserAfterAuthentication(authResult: result, username: email)
-                    print("✅ Complete signup process successful")
+                    
                     DispatchQueue.main.async {
-                        isLoading = false
-                        isLoggedIn = true
-                        dismiss()
+                        // Show confetti on successful signup
+                        withAnimation {
+                            showConfetti = true
+                        }
+                        
+                        // Delay dismissal to show confetti
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                            isLoading = false
+                            isLoggedIn = true
+                            dismiss()
+                        }
                     }
                 } catch {
-                    print("❌ Failed to create Firestore user")
-                    print("❌ Error details: \(error)")
                     DispatchQueue.main.async {
                         isLoading = false
                         errorMessage = "Failed to create user profile: \(error.localizedDescription)"
