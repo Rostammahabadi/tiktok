@@ -242,13 +242,13 @@ class ProjectService {
     
     // MARK: - Delete
     
-    func deleteProject(_ projectId: String) async throws {
+    func markProjectAsDeleted(_ projectId: String) async throws {
         print("📝 Deleting project: \(projectId)")
         
         do {
             try await db.collection(projectsCollection)
                 .document(projectId)
-                .delete()
+                .updateData(["is_deleted" : true])
             print("✅ Project deleted successfully")
         } catch {
             print("❌ Failed to delete project: \(error.localizedDescription)")

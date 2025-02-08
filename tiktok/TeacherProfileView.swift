@@ -228,6 +228,7 @@ struct ProjectThumbnail: View {
     @State private var errorMessage: String?
     @State private var showShareSheet = false
     @State private var shareURL: URL?
+    @State private var showDeleteConfirmation = false
     
     var body: some View {
         VStack(spacing: 8) {
@@ -280,6 +281,12 @@ struct ProjectThumbnail: View {
             } label: {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
+
+            Button(role: .destructive) {
+                showDeleteConfirmation = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
         }
         .padding(.vertical, 8)
         
@@ -304,6 +311,43 @@ struct ProjectThumbnail: View {
             if let errorMessage = errorMessage {
                 Text(errorMessage)
             }
+        }
+        
+        // Show delete confirmation
+        .alert("Delete Project", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                Task {
+                    guard let projectId = project.id else { return }
+                    
+                    do {
+                        // 1. Mark as deleted in Firestore
+                        try await ProjectService.shared.markProjectAsDeleted(projectId)
+                        
+                        // 2. Remove local files for this project
+                        let docsURL = try FileManager.default.url(
+                            for: .documentDirectory,
+                            in: .userDomainMask,
+                            appropriateFor: nil,
+                            create: false
+                        )
+                        let projectDir = docsURL.appendingPathComponent("LocalProjects/\(projectId)")
+                        
+                        if FileManager.default.fileExists(atPath: projectDir.path) {
+                            try FileManager.default.removeItem(at: projectDir)
+                            print("✅ Removed local files for project: \(projectId)")
+                        }
+                        
+                        // 3. Refresh the view
+                        await viewModel.fetchProjects()
+                    } catch {
+                        print("❌ Error deleting project: \(error.localizedDescription)")
+                        errorMessage = "Failed to delete project"
+                    }
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete this project? This action cannot be undone.")
         }
     }
     
