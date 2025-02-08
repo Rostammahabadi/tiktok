@@ -49,8 +49,14 @@ class ProjectViewModel: ObservableObject {
 struct TeacherProfileView: View {
     @Binding var isLoggedIn: Bool
     @StateObject private var projectViewModel = ProjectViewModel()
-    
     @State private var selectedTab = 0
+    @State private var isLoggingOut = false
+    @State private var showLogoutError = false
+    @State private var showEditProfile = false
+    
+    private var currentUser: UserDefaultsManager.LocalUser? {
+        UserDefaultsManager.shared.getCurrentUser()
+    }
     
     var body: some View {
         NavigationView {
@@ -70,18 +76,24 @@ struct TeacherProfileView: View {
                     
                     if selectedTab == 0 {
                         // Projects Grid
-                        LazyVGrid(columns: [
-                            GridItem(.flexible()),
-                            GridItem(.flexible())
-                        ], spacing: 16) {
-                            ForEach(projectViewModel.projects) { project in
-                                ProjectThumbnail(
-                                    project: project,
-                                    viewModel: projectViewModel
-                                )
+                        if projectViewModel.isLoading {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .padding()
+                        } else {
+                            LazyVGrid(columns: [
+                                GridItem(.flexible()),
+                                GridItem(.flexible())
+                            ], spacing: 16) {
+                                ForEach(projectViewModel.projects) { project in
+                                    ProjectThumbnail(
+                                        project: project,
+                                        viewModel: projectViewModel
+                                    )
+                                }
                             }
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
                     } else {
                         // About section
                         aboutSection
@@ -90,14 +102,39 @@ struct TeacherProfileView: View {
                 .padding(.vertical)
             }
             .refreshable {
-                // Show loading indicator and refresh projects
                 await projectViewModel.fetchProjects()
             }
             .navigationBarTitle("Profile", displayMode: .inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Logout", action: logout)
-                        .foregroundColor(Theme.accentColor)
+                    HStack {
+                        Button(action: { showEditProfile = true }) {
+                            Image(systemName: "pencil.circle")
+                                .imageScale(.large)
+                                .foregroundColor(Theme.accentColor)
+                        }
+                        
+                        Button(action: handleLogout) {
+                            if isLoggingOut {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                            } else {
+                                Text("Logout")
+                                    .foregroundColor(Theme.accentColor)
+                            }
+                        }
+                        .disabled(isLoggingOut)
+                    }
+                }
+            }
+            .alert("Logout Error", isPresented: $showLogoutError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Failed to logout. Please try again.")
+            }
+            .sheet(isPresented: $showEditProfile) {
+                if let user = currentUser {
+                    EditProfileView(currentUsername: user.username, currentBio: user.bio)
                 }
             }
         }
@@ -116,13 +153,19 @@ struct TeacherProfileView: View {
                 .frame(width: 100, height: 100)
                 .foregroundColor(Theme.accentColor)
             
-            Text("Jane Smith")
-                .font(Theme.titleFont)
-                .foregroundColor(Theme.accentColor)
-            
-            Text("Math Teacher | 10 years experience")
-                .font(Theme.bodyFont)
-                .foregroundColor(Theme.textColor.opacity(0.8))
+            if let user = currentUser {
+                Text(user.username)
+                    .font(Theme.titleFont)
+                    .foregroundColor(Theme.accentColor)
+                
+                Text(user.email)
+                    .font(Theme.bodyFont)
+                    .foregroundColor(Theme.textColor.opacity(0.8))
+            } else {
+                Text("Loading...")
+                    .font(Theme.titleFont)
+                    .foregroundColor(Theme.accentColor)
+            }
         }
         .padding()
     }
@@ -133,37 +176,34 @@ struct TeacherProfileView: View {
                 .font(Theme.headlineFont)
                 .foregroundColor(Theme.textColor)
             
-            Text("I'm passionate about making math accessible and fun...")
-                .font(Theme.bodyFont)
-                .foregroundColor(Theme.textColor.opacity(0.8))
+            if let user = currentUser {
+                Text(user.bio)
+                    .font(Theme.bodyFont)
+                    .foregroundColor(Theme.textColor.opacity(0.8))
+            }
         }
         .padding(.horizontal)
     }
     
-    private var loadingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.4).edgesIgnoringSafeArea(.all)
-            
-            VStack(spacing: 16) {
-                ProgressView().scaleEffect(1.5)
-                Text("Loading content...")
-                    .font(.headline)
-                    .foregroundColor(.white)
-            }
-            .padding(30)
-            .background(Color(UIColor.systemBackground).opacity(0.8))
-            .cornerRadius(10)
-        }
-    }
-    
     // MARK: - Actions
     
-    private func logout() {
-        do {
-            try Auth.auth().signOut()
-            isLoggedIn = false
-        } catch {
-            print("❌ Error signing out: \(error.localizedDescription)")
+    private func handleLogout() {
+        guard !isLoggingOut else { return }
+        isLoggingOut = true
+        
+        Task {
+            do {
+                try await LogoutService.shared.logout()
+                await MainActor.run {
+                    isLoggingOut = false
+                    isLoggedIn = false
+                }
+            } catch {
+                await MainActor.run {
+                    isLoggingOut = false
+                    showLogoutError = true
+                }
+            }
         }
     }
 }

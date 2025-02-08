@@ -249,8 +249,11 @@ struct LoginView: View {
                                 CustomTextField(
                                     placeholder: "Email",
                                     text: $email,
-                                    contentType: .username
+                                    isSecure: false,
+                                    style: .dark
                                 )
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
                                 .focused($focusedField, equals: .email)
                                 .keyboardType(.emailAddress)
                             }
@@ -264,9 +267,11 @@ struct LoginView: View {
                                 CustomTextField(
                                     placeholder: "Password",
                                     text: $password,
-                                    contentType: .password,
-                                    isSecure: true
+                                    isSecure: true,
+                                    style: .dark
                                 )
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
                                 .focused($focusedField, equals: .password)
                             }
                             
@@ -345,16 +350,53 @@ struct LoginView: View {
     }
     
     func login() {
+        print("🔐 Starting login process...")
         errorMessage = nil
         isLoading = true
+        
         Auth.auth().signIn(withEmail: email, password: password) { result, error in
-            isLoading = false
             if let error = error {
+                isLoading = false
                 errorMessage = error.localizedDescription
                 return
             }
-            isLoggedIn = true
-            dismiss()
+            
+            guard let result = result else {
+                isLoading = false
+                errorMessage = "Failed to get authentication result"
+                return
+            }
+            
+            // Fetch user data from Firestore and save to UserDefaults
+            Task {
+                do {
+                    if let user = try await UserService.shared.getUser(userId: result.user.uid) {
+                        // Save user data to UserDefaults
+                        UserDefaultsManager.shared.saveCurrentUser(
+                            id: result.user.uid,
+                            email: user.email,
+                            username: user.username,
+                            bio: user.bio
+                        )
+                        
+                        DispatchQueue.main.async {
+                            isLoading = false
+                            isLoggedIn = true
+                            dismiss()
+                        }
+                    } else {
+                        DispatchQueue.main.async {
+                            isLoading = false
+                            errorMessage = "Failed to fetch user profile"
+                        }
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        isLoading = false
+                        errorMessage = "Failed to fetch user profile: \(error.localizedDescription)"
+                    }
+                }
+            }
         }
     }
 }
@@ -418,25 +460,32 @@ struct SignupView: View {
                             CustomTextField(
                                 placeholder: "Email",
                                 text: $email,
-                                contentType: .username
+                                isSecure: false,
+                                style: .dark
                             )
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
                             .focused($focusedField, equals: .email)
                             .keyboardType(.emailAddress)
                             
                             CustomTextField(
                                 placeholder: "Password",
                                 text: $password,
-                                contentType: .password,
-                                isSecure: true
+                                isSecure: true,
+                                style: .dark
                             )
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
                             .focused($focusedField, equals: .password)
                             
                             CustomTextField(
                                 placeholder: "Confirm Password",
                                 text: $confirmPassword,
-                                contentType: .password,
-                                isSecure: true
+                                isSecure: true,
+                                style: .dark
                             )
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
                             .focused($focusedField, equals: .confirmPassword)
                         }
                         .padding(.horizontal, 20)
@@ -497,7 +546,7 @@ struct SignupView: View {
         }
         .fullScreenCover(isPresented: $showUsernameSelection) {
             if let authResult = authResult {
-                UsernameSelectionView(isLoggedIn: $isLoggedIn, authResult: authResult)
+                ProfileSetupView(isLoggedIn: $isLoggedIn, authResult: authResult)
             }
         }
         .onAppear {
@@ -537,59 +586,7 @@ struct SignupView: View {
     }
 }
 
-// MARK: - Custom TextField Styles
-
-struct CustomTextField: View {
-    var placeholder: String
-    @Binding var text: String
-    var contentType: UITextContentType?
-    var isSecure: Bool = false
-    
-    var body: some View {
-        ZStack(alignment: .leading) {
-            if text.isEmpty {
-                Text(placeholder)
-                    .foregroundColor(Color.white.opacity(0.7))
-                    .padding(.horizontal, 16)
-            }
-            
-            if isSecure {
-                SecureField("", text: $text)
-                    .textContentType(contentType)
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-                    .padding()
-                    .foregroundColor(.white)
-                    .frame(height: 50)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.white.opacity(0.1))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                    )
-            } else {
-                TextField("", text: $text)
-                    .textContentType(contentType)
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-                    .padding()
-                    .foregroundColor(.white)
-                    .frame(height: 50)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.white.opacity(0.1))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                    )
-            }
-        }
-    }
-}
-
+// MARK: - Preview Provider
 struct WelcomeView_Previews: PreviewProvider {
     static var previews: some View {
         WelcomeView(isLoggedIn: .constant(false))

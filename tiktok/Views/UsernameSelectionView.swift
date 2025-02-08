@@ -1,16 +1,20 @@
 import SwiftUI
 import FirebaseAuth
 
-struct UsernameSelectionView: View {
+struct ProfileSetupView: View {
     @Environment(\.dismiss) var dismiss
     @Binding var isLoggedIn: Bool
     let authResult: AuthDataResult
     
-    @State private var username: String = ""
+    @State private var username = ""
+    @State private var bio = ""
+    @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var isLoading: Bool = false
-    @State private var showConfetti: Bool = false
+    @State private var showError = false
     @FocusState private var isUsernameFocused: Bool
+    @FocusState private var isBioFocused: Bool
+    
+    @State private var showConfetti: Bool = false
     
     private let gradientColors: [Color] = [
         Theme.primaryColor,
@@ -42,7 +46,7 @@ struct UsernameSelectionView: View {
                         .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                         .padding(.top, 40)
                     
-                    Text("Choose Your Username")
+                    Text("Choose Your Profile")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
@@ -53,33 +57,63 @@ struct UsernameSelectionView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                     
-                    // Username input field
-                    VStack(spacing: 20) {
+                    // Username Field
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Choose a username")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
                         CustomTextField(
                             placeholder: "Username",
                             text: $username,
-                            contentType: .username
+                            isSecure: false
                         )
                         .focused($isUsernameFocused)
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
                     }
                     .padding(.horizontal, 20)
-                    .padding(.top, 20)
+                    
+                    // Bio Field
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Tell us about yourself")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        ZStack(alignment: .topLeading) {
+                            if bio.isEmpty {
+                                Text("Share a bit about yourself...")
+                                    .foregroundColor(Color(.systemGray3))
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                            }
+                            
+                            TextEditor(text: $bio)
+                                .frame(height: 100)
+                                .scrollContentBackground(.hidden)
+                                .background(Color(.systemBackground))
+                                .cornerRadius(12)
+                                .focused($isBioFocused)
+                                .padding(1)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(isBioFocused ? Theme.accentColor : Color.clear, lineWidth: 2)
+                                )
+                        }
+                    }
+                    .padding(.horizontal, 20)
                     
                     if let errorMessage = errorMessage {
                         Text(errorMessage)
-                            .font(.subheadline)
                             .foregroundColor(.white)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
+                            .padding()
                             .background(Color.red.opacity(0.8))
-                            .cornerRadius(10)
-                            .transition(.scale.combined(with: .opacity))
+                            .cornerRadius(8)
                     }
                     
-                    // Continue button
-                    Button(action: completeSignup) {
+                    // Continue Button
+                    Button(action: createProfile) {
                         ZStack {
                             if isLoading {
                                 ProgressView()
@@ -96,17 +130,15 @@ struct UsernameSelectionView: View {
                         .foregroundColor(Theme.primaryColor)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(
-                            RoundedRectangle(cornerRadius: 25)
-                                .fill(Color.white)
-                        )
+                        .background(Color.white)
+                        .cornerRadius(25)
                         .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
                     }
-                    .disabled(isLoading || username.isEmpty)
+                    .disabled(isLoading || username.isEmpty || bio.isEmpty)
                     .padding(.horizontal, 20)
                     .padding(.top, 10)
                     
-                    Text("You can change your username later in settings")
+                    Text("You can change your profile later in settings")
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.8))
                         .padding(.top, 10)
@@ -122,53 +154,72 @@ struct UsernameSelectionView: View {
         .onAppear {
             isUsernameFocused = true
         }
+        .alert("Error", isPresented: $showError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "An error occurred. Please try again.")
+        }
     }
     
-    private func completeSignup() {
-        guard !username.isEmpty else { return }
-        
-        isLoading = true
-        errorMessage = nil
+    private func createProfile() {
+        guard !isLoading else { return }
         
         // Validate username
         let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedUsername.count >= 3 else {
             errorMessage = "Username must be at least 3 characters"
-            isLoading = false
+            showError = true
             return
         }
         
         guard trimmedUsername.count <= 30 else {
             errorMessage = "Username must be less than 30 characters"
-            isLoading = false
+            showError = true
             return
         }
         
-        // Create user in Firestore
+        // Validate bio
+        let trimmedBio = bio.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBio.isEmpty else {
+            errorMessage = "Please add a short bio about yourself"
+            showError = true
+            return
+        }
+        
+        guard trimmedBio.count <= 150 else {
+            errorMessage = "Bio must be less than 150 characters"
+            showError = true
+            return
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
         Task {
             do {
                 try await UserService.shared.createUserAfterAuthentication(
                     authResult: authResult,
-                    username: trimmedUsername
+                    username: trimmedUsername,
+                    bio: trimmedBio
                 )
                 
-                DispatchQueue.main.async {
-                    // Show confetti on successful signup
-                    withAnimation {
-                        showConfetti = true
-                    }
-                    
-                    // Delay dismissal to show confetti
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                        isLoading = false
-                        isLoggedIn = true
-                        dismiss()
-                    }
+                // Save to UserDefaults
+                UserDefaultsManager.shared.saveCurrentUser(
+                    id: authResult.user.uid,
+                    email: authResult.user.email ?? "",
+                    username: trimmedUsername,
+                    bio: trimmedBio
+                )
+                
+                await MainActor.run {
+                    isLoading = false
+                    isLoggedIn = true
                 }
             } catch {
-                DispatchQueue.main.async {
+                await MainActor.run {
                     isLoading = false
-                    errorMessage = "Failed to create user profile: \(error.localizedDescription)"
+                    errorMessage = error.localizedDescription
+                    showError = true
                 }
             }
         }
