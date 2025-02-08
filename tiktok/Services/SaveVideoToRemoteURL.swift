@@ -89,7 +89,8 @@ class SaveVideoToRemoteURL: NSObject {
                     "created_at": FieldValue.serverTimestamp(),
                     "main_video_id": mainVideoId,
                     "segment_ids": segmentIds,
-                    "thumbnail_url": mainThumbnailURL?.absoluteString ?? NSNull()
+                    "thumbnail_url": mainThumbnailURL?.absoluteString ?? NSNull(),
+                    "is_deleted": false
                 ]
                 
                 // Include serialization JSON if available
