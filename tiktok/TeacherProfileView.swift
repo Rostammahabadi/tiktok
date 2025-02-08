@@ -24,8 +24,18 @@ class ProjectViewModel: ObservableObject {
             )
             print("📂 Documents Directory: \(docsURL.path)")
             
-            // 1. Fetch Firestore projects
-            let fetchedProjects = try await ProjectService.shared.fetchUserProjects()
+            // 1. Try to load from local storage first
+            var fetchedProjects: [Project] = []
+            do {
+                print("📱 Loading projects from local storage...")
+                fetchedProjects = try await LocalProjectService.shared.loadAllLocalProjects()
+                print("✅ Found \(fetchedProjects.count) local projects")
+            } catch {
+                print("⚠️ Failed to load local projects: \(error.localizedDescription)")
+                print("🔄 Falling back to Firestore...")
+                // Fallback to Firestore if local loading fails
+                fetchedProjects = try await ProjectService.shared.fetchUserProjects()
+            }
             
             // 2. Load all thumbnails in parallel
             let projectIds = fetchedProjects.compactMap { $0.id }
@@ -359,7 +369,7 @@ struct ProjectThumbnail: View {
             let localVideos = try await LocalProjectService.shared.loadAndPrepareVideosLocally(projectId: projectId)
             print("✅ Found \(localVideos.videos.count) videos")
             
-            // 2) OPTIONAL: If those localVideos are *actually remote URLs*, you can
+            // 2. OPTIONAL: If those localVideos are *actually remote URLs*, you can
             //    download them. Otherwise if they are already local paths, skip.
             var finalLocalVideos: [Video] = []
             for var video in localVideos.videos {
@@ -373,7 +383,7 @@ struct ProjectThumbnail: View {
                 }
             }
             
-            // 3) Show the editor
+            // 3. Show the editor
             await MainActor.run {
                 self.projectVideos = finalLocalVideos
                 self.isLoading = false

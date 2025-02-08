@@ -70,4 +70,50 @@ class LocalProjectService {
         
         return (videos: videos, serializedSettings: serializedSettings)
     }
+    
+    /// Load all local projects from /Documents/LocalProjects/
+    func loadAllLocalProjects() async throws -> [Project] {
+        let docs = try FileManager.default.url(
+            for: .documentDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: false
+        )
+        let localProjectsDir = docs.appendingPathComponent("LocalProjects", isDirectory: true)
+        
+        // Get all subdirectories in LocalProjects (each is a project)
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: localProjectsDir,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+        
+        // Load each project
+        var projects: [Project] = []
+        for projectDir in contents {
+            let projectId = projectDir.lastPathComponent
+            if let localProject = try? loadLocalProject(projectId: projectId) {
+                // Convert LocalProject to Project
+                let project = Project(
+                    id: localProject.projectId,
+                    authorId: localProject.authorId,
+                    title: "Local Project",
+                    description: nil,
+                    thumbnailUrl: localProject.mainThumbnailFilePath,
+                    status: .created,
+                    serializedSettings: {
+                        if let serialization = localProject.serialization,
+                           let dataDict = serialization["data"]?.value as? [String: Any] {
+                            return try? JSONSerialization.data(withJSONObject: dataDict)
+                        }
+                        return nil
+                    }(),
+                    createdAt: localProject.createdAt
+                )
+                projects.append(project)
+            }
+        }
+        
+        return projects
+    }
 }
