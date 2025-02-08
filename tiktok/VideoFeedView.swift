@@ -3,7 +3,6 @@ import AVKit
 import FirebaseFirestore
 import FirebaseStorage
 
-
 struct VideoFeedView: View {
     @StateObject private var viewModel = VideoFeedViewModel()
     @State private var currentIndex = 0
@@ -211,51 +210,133 @@ struct VideoPlayerView: View {
         player = nil
         
         do {
-            let videoUrl = useOriginal ? video.originalUrl?.absoluteString : video.hlsUrl?.absoluteString
-            guard let url = URL(string: videoUrl ?? "") else {
-                throw NSError(domain: "VideoPlayer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
-            }
-            
-            let asset = AVURLAsset(url: url)
-            
-            // Load required asset properties asynchronously
-            try await asset.load(.tracks, .duration, .preferredTransform)
-            
-            let playerItem = AVPlayerItem(asset: asset)
-            let newPlayer = AVPlayer(playerItem: playerItem)
-            
-            // Observe when the item is ready to play
-            let observation = playerItem.observe(\.status) { item, _ in
-                if item.status == .readyToPlay {
-                    Task { @MainActor in
-                        self.isReadyToPlay = true
-                        if self.isActive {
-                            self.isPlaying = true
-                            newPlayer.play()
+            if !useOriginal, let hlsPath = video.hlsPath, let segments = video.hlsSegments {
+                print("🎬 Setting up HLS playback")
+                print("📋 Manifest path: \(hlsPath)")
+                
+                // Get Storage references
+                let storage = Storage.storage()
+                let manifestRef = storage.reference().child(hlsPath)
+                
+                // First verify all segments exist
+                print("🔍 Verifying HLS segments...")
+                for segmentPath in segments {
+                    let segmentRef = storage.reference().child(segmentPath)
+                    _ = try await segmentRef.getMetadata()
+                    print("✅ Verified segment: \(segmentPath)")
+                }
+                
+                // Get manifest URL
+                let manifestUrl = try await manifestRef.downloadURL()
+                print("📄 Got manifest URL: \(manifestUrl)")
+                
+                // Create asset with HLS-specific options
+                let asset = AVURLAsset(
+                    url: manifestUrl,
+                    options: [
+                        "AVURLAssetHTTPHeaderFieldsKey": ["Accept": "application/x-mpegURL"],
+                        "AVURLAssetOutOfBandMIMETypeKey": "application/x-mpegURL"
+                    ]
+                )
+                
+                // Load and validate HLS content
+                try await asset.load(.tracks, .duration)
+                let tracks = try await asset.loadTracks(withMediaType: .video)
+                print("🎥 Found \(tracks.count) video tracks")
+                
+                let playerItem = AVPlayerItem(asset: asset)
+                let newPlayer = AVPlayer(playerItem: playerItem)
+                
+                // Add status observation
+                let statusObservation = playerItem.observe(\.status) { item, _ in
+                    if item.status == .readyToPlay {
+                        print("✅ HLS video ready to play")
+                        Task { @MainActor in
+                            self.isReadyToPlay = true
+                            if self.isActive {
+                                self.isPlaying = true
+                                newPlayer.play()
+                            }
+                        }
+                    } else if item.status == .failed {
+                        print("❌ HLS playback failed: \(item.error?.localizedDescription ?? "Unknown error")")
+                    }
+                }
+                observers.append(statusObservation)
+                
+                // Monitor loaded ranges
+                let timeRangeObservation = playerItem.observe(\.loadedTimeRanges) { item, _ in
+                    guard let timeRange = item.loadedTimeRanges.first?.timeRangeValue else { return }
+                    let start = timeRange.start.seconds
+                    let duration = timeRange.duration.seconds
+                    print("📊 Buffered: \(start) to \(start + duration) seconds")
+                }
+                observers.append(timeRangeObservation)
+                
+                // Monitor if playback is likely to keep up
+                let playbackLikelyObservation = playerItem.observe(\.isPlaybackLikelyToKeepUp) { item, _ in
+                    print("📊 Playback likely to keep up: \(item.isPlaybackLikelyToKeepUp)")
+                }
+                observers.append(playbackLikelyObservation)
+                
+                await MainActor.run {
+                    self.player = newPlayer
+                    self.isLoading = false
+                }
+                
+                // Set up looping
+                NotificationCenter.default.addObserver(
+                    forName: .AVPlayerItemDidPlayToEndTime,
+                    object: playerItem,
+                    queue: .main
+                ) { [weak newPlayer] _ in
+                    print("🔄 HLS video reached end, looping...")
+                    newPlayer?.seek(to: .zero)
+                    newPlayer?.play()
+                }
+            } else if let originalUrl = video.originalUrl {
+                // Fallback to original video URL
+                print("🎬 Using original video URL: \(originalUrl)")
+                
+                let asset = AVURLAsset(url: originalUrl)
+                try await asset.load(.tracks, .duration)
+                
+                let playerItem = AVPlayerItem(asset: asset)
+                let newPlayer = AVPlayer(playerItem: playerItem)
+                
+                let observation = playerItem.observe(\.status) { item, _ in
+                    if item.status == .readyToPlay {
+                        Task { @MainActor in
+                            self.isReadyToPlay = true
+                            if self.isActive {
+                                self.isPlaying = true
+                                newPlayer.play()
+                            }
                         }
                     }
                 }
-            }
-            observers.append(observation)
-            
-            await MainActor.run {
-                self.player = newPlayer
-                self.isLoading = false
-            }
-            
-            // Set up player
-            newPlayer.actionAtItemEnd = .none
-            
-            // Add observer for playback ended
-            NotificationCenter.default.addObserver(
-                forName: .AVPlayerItemDidPlayToEndTime,
-                object: playerItem,
-                queue: .main
-            ) { [weak newPlayer] _ in
-                newPlayer?.seek(to: .zero)
-                newPlayer?.play()
+                observers.append(observation)
+                
+                await MainActor.run {
+                    self.player = newPlayer
+                    self.isLoading = false
+                }
+                
+                // Set up looping
+                NotificationCenter.default.addObserver(
+                    forName: .AVPlayerItemDidPlayToEndTime,
+                    object: playerItem,
+                    queue: .main
+                ) { [weak newPlayer] _ in
+                    print("🔄 Original video reached end, looping...")
+                    newPlayer?.seek(to: .zero)
+                    newPlayer?.play()
+                }
+            } else {
+                throw NSError(domain: "VideoPlayer", code: -1, userInfo: [NSLocalizedDescriptionKey: "No valid video URL"])
             }
         } catch {
+            print("❌ Error setting up player: \(error.localizedDescription)")
             await MainActor.run {
                 self.error = error
                 self.isLoading = false
@@ -297,14 +378,13 @@ class VideoFeedViewModel: ObservableObject {
         
         var query = db.collection("videos")
             .whereField("status", isEqualTo: "completed")
-            .whereField("type", isEqualTo: "hls")
+            .whereField("type", isEqualTo: "hls")  // Only fetch HLS videos
             .order(by: "created_at", descending: true)
             .limit(to: batchSize)
-        print("🔍 Querying Firestore collection 'videos'...")
-        print("🔍 Query: \(query)")
+        print("🔍 Querying Firestore collection 'videos' for HLS videos...")
         
         query.getDocuments { [weak self] snapshot, error in
-            guard let self = self else { return } 
+            guard let self = self else { return }
             self.isFetching = false
             
             if let error = error {
@@ -315,7 +395,7 @@ class VideoFeedViewModel: ObservableObject {
             }
             
             guard let documents = snapshot?.documents, !documents.isEmpty else {
-                print("⚠️ No documents found")
+                print("⚠️ No HLS videos found")
                 self.isLoading = false
                 return
             }
@@ -335,12 +415,12 @@ class VideoFeedViewModel: ObservableObject {
     
     private func loadMore() {
         guard !isFetching, let lastDocument = lastDocument else { return }
-        print("🔄 Loading more videos...")
+        print("🔄 Loading more HLS videos...")
         isFetching = true
         
         db.collection("videos")
             .whereField("status", isEqualTo: "completed")
-            .whereField("type", isEqualTo: "hls")
+            .whereField("type", isEqualTo: "hls")  // Only fetch HLS videos
             .order(by: "created_at", descending: true)
             .limit(to: batchSize)
             .start(afterDocument: lastDocument)
@@ -354,7 +434,7 @@ class VideoFeedViewModel: ObservableObject {
                 }
                 
                 guard let documents = snapshot?.documents, !documents.isEmpty else {
-                    print("⚠️ No more videos to load")
+                    print("⚠️ No more HLS videos to load")
                     return
                 }
                 
@@ -366,33 +446,50 @@ class VideoFeedViewModel: ObservableObject {
     private func processDocuments(_ documents: [QueryDocumentSnapshot]) {
         let newVideos = documents.compactMap { document -> VideoModel? in
             let data = document.data()
-            print("🎥 Processing video document: \(document.documentID)")
+            print("🎥 Processing HLS video document: \(document.documentID)")
             
-            var hlsUrl: URL?
-            var originalUrl: URL?
-            
-            if let hlsUrlString = data["hlsUrl"] as? String {
-                hlsUrl = URL(string: hlsUrlString)
-                print("🎯 HLS URL available: \(hlsUrlString)")
+            // Get HLS path and parse for segments
+            if let hlsPath = data["hlsPath"] as? String {
+                print("🎯 HLS manifest path: \(hlsPath)")
+                
+                // Get the base folder path
+                let hlsFolderPath = hlsPath.replacingOccurrences(of: "/output.m3u8", with: "")
+                
+                // Define expected segment paths
+                let segmentPaths = (0...10).map { index in // Assuming max 10 segments
+                    "\(hlsFolderPath)/segment\(String(format: "%03d", index)).ts"
+                }
+                print("🎬 Looking for segments in: \(hlsFolderPath)")
+                print("📋 Expected segments:")
+                segmentPaths.forEach { print("   - \($0)") }
+                
+                return VideoModel(
+                    id: document.documentID,
+                    hlsPath: hlsPath,
+                    hlsSegments: segmentPaths,
+                    hlsUrl: URL(string: data["hlsUrl"] as? String ?? ""),
+                    originalUrl: URL(string: data["originalUrl"] as? String ?? ""),
+                    status: data["status"] as? String ?? "completed",
+                    error: nil
+                )
             }
             
-            if let originalUrlString = data["originalUrl"] as? String {
-                originalUrl = URL(string: originalUrlString)
-                print("🎯 Original URL available: \(originalUrlString)")
+            // Fallback to original URL if no HLS
+            if let originalUrl = URL(string: data["originalUrl"] as? String ?? "") {
+                print("⚠️ No HLS path found, using original URL")
+                return VideoModel(
+                    id: document.documentID,
+                    hlsPath: nil,
+                    hlsSegments: nil,
+                    hlsUrl: nil,
+                    originalUrl: originalUrl,
+                    status: data["status"] as? String ?? "completed",
+                    error: nil
+                )
             }
             
-            guard hlsUrl != nil || originalUrl != nil else {
-                print("❌ No valid URLs found for video")
-                return nil
-            }
-            
-            return VideoModel(
-                id: document.documentID,
-                hlsUrl: hlsUrl,
-                originalUrl: originalUrl,
-                status: "completed",
-                error: nil
-            )
+            print("❌ No valid URLs found for video")
+            return nil
         }
         
         DispatchQueue.main.async {
@@ -404,7 +501,9 @@ class VideoFeedViewModel: ObservableObject {
 
 struct VideoModel: Identifiable {
     let id: String
-    let hlsUrl: URL?
+    let hlsPath: String?      // Path to m3u8 manifest in Storage
+    let hlsSegments: [String]? // List of segment paths
+    let hlsUrl: URL?          // Pre-signed URL (fallback)
     let originalUrl: URL?
     let status: String
     let error: String?

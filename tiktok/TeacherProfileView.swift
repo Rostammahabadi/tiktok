@@ -9,7 +9,11 @@ class ProjectViewModel: ObservableObject {
     @Published var isLoading = false
     
     func fetchProjects() async {
-        await MainActor.run { isLoading = true }
+        await MainActor.run { 
+            isLoading = true
+            // Clear existing thumbnails to force a fresh load
+            thumbnails.removeAll()
+        }
         
         do {
             let docsURL = try FileManager.default.url(
@@ -25,6 +29,7 @@ class ProjectViewModel: ObservableObject {
             
             // 2. Load all thumbnails in parallel
             let projectIds = fetchedProjects.compactMap { $0.id }
+            print("🔄 Refreshing thumbnails for \(projectIds.count) projects...")
             let loadedThumbnails = await LocalThumbnailService.shared.loadThumbnails(projectIds: projectIds)
             
             // 3. Update UI state
@@ -49,45 +54,44 @@ struct TeacherProfileView: View {
     
     var body: some View {
         NavigationView {
-            ZStack {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Profile header
-                        profileHeader
-                        
-                        // Tab view
-                        Picker("", selection: $selectedTab) {
-                            Text("Projects").tag(0)
-                            Text("About").tag(1)
-                        }
-                        .pickerStyle(SegmentedPickerStyle())
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Profile header
+                    profileHeader
                         .padding(.horizontal)
-                        
-                        if selectedTab == 0 {
-                            // Projects Grid
-                            LazyVGrid(columns: [GridItem(.flexible()),
-                                                GridItem(.flexible())],
-                                      spacing: 16)
-                            {
-                                ForEach(projectViewModel.projects) { project in
-                                    ProjectThumbnail(
-                                        project: project,
-                                        viewModel: projectViewModel
-                                    )
-                                }
+                    
+                    // Tab view
+                    Picker("", selection: $selectedTab) {
+                        Text("Projects").tag(0)
+                        Text("About").tag(1)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal)
+                    
+                    if selectedTab == 0 {
+                        // Projects Grid
+                        LazyVGrid(columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible())
+                        ], spacing: 16) {
+                            ForEach(projectViewModel.projects) { project in
+                                ProjectThumbnail(
+                                    project: project,
+                                    viewModel: projectViewModel
+                                )
                             }
-                            .padding(.horizontal)
-                        } else {
-                            // About section
-                            aboutSection
                         }
+                        .padding(.horizontal)
+                    } else {
+                        // About section
+                        aboutSection
                     }
                 }
-                
-                // Loading overlay
-                if projectViewModel.isLoading {
-                    loadingOverlay
-                }
+                .padding(.vertical)
+            }
+            .refreshable {
+                // Show loading indicator and refresh projects
+                await projectViewModel.fetchProjects()
             }
             .navigationBarTitle("Profile", displayMode: .inline)
             .toolbar {
@@ -175,36 +179,46 @@ struct ProjectThumbnail: View {
     @State private var errorMessage: String?
     
     var body: some View {
-        // Each "card"
-        ZStack {
-            // Thumbnail image or placeholder
-            if let image = viewModel.thumbnails[project.id ?? ""] {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 150, height: 150)
-                    .clipped()
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Theme.accentColor.opacity(0.3), lineWidth: 1)
-                    )
-            } else {
-                // No image? Placeholder
-                placeholderView
+        VStack(spacing: 8) {
+            ZStack {
+                // Thumbnail image or placeholder
+                if let image = viewModel.thumbnails[project.id ?? ""] {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 150, height: 150)
+                        .clipped()
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Theme.accentColor.opacity(0.3), lineWidth: 1)
+                        )
+                } else {
+                    // No image? Placeholder
+                    placeholderView
+                }
+                
+                // If loading
+                if isLoading {
+                    loadingOverlay
+                }
+                
+                // If error
+                if let error = errorMessage {
+                    errorOverlay(error)
+                }
             }
+            .frame(width: 150, height: 150)
             
-            // If loading
-            if isLoading {
-                loadingOverlay
-            }
-            
-            // If error
-            if let error = errorMessage {
-                errorOverlay(error)
-            }
+            Text(project.title ?? "Untitled")
+                .font(.caption)
+                .foregroundColor(Theme.textColor)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(height: 32)
         }
-        // Attach context menu for this card
+        .frame(width: 170, height: 190)
+        .contentShape(Rectangle())  // Make entire area tappable
         .contextMenu {
             Button {
                 Task {
@@ -215,7 +229,7 @@ struct ProjectThumbnail: View {
                 Label("Edit", systemImage: "pencil")
             }
         }
-        .frame(width: 150)
+        .padding(.vertical, 8)
         
         // Show full editor if needed
         .fullScreenCover(isPresented: $showEditView) {
