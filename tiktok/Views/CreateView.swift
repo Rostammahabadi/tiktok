@@ -12,6 +12,7 @@ struct CreateView: View {
     @State private var achievementTitle = ""
     @State private var showHelp = false
     @State private var pickerDelegate: ImagePickerDelegate?
+    @State private var showAIBuilder = false
     
     // Matching gradient colors from WelcomeView
     let gradientColors: [SwiftUICore.Color] = [
@@ -82,6 +83,38 @@ struct CreateView: View {
                 }
                 .padding(.horizontal)
                 
+                // Build with AI Option
+                Button(action: {
+                    showAIBuilder = true
+                }) {
+                    VStack(spacing: 15) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.1))
+                                .frame(width: 80, height: 80)
+                            
+                            Image(systemName: "wand.and.stars")
+                                .font(.system(size: 30))
+                                .foregroundColor(.white)
+                        }
+                        Text("Build with AI")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 160)
+                    .background(Color.black.opacity(0.3))
+                    .cornerRadius(20)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    )
+                    .scaleEffect(isAnimating ? 1.02 : 1)
+                    .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true),
+                               value: isAnimating)
+                }
+                .padding(.horizontal)
+                
                 // Studio Option
                 Button(action: {
                     print("📱 Studio button tapped")
@@ -117,7 +150,7 @@ struct CreateView: View {
                                 .fill(Color.white.opacity(0.1))
                                 .frame(width: 80, height: 80)
                             
-                            Image(systemName: "wand.and.stars")
+                            Image(systemName: "slider.horizontal.3")
                                 .font(.system(size: 30))
                                 .foregroundColor(.white)
                         }
@@ -156,6 +189,12 @@ struct CreateView: View {
                  showCamera = false
                  increaseStreak()
              }
+        }
+        .sheet(isPresented: $showAIBuilder) {
+            // TODO: Add AIBuilderView here
+            Text("AI Builder Coming Soon")
+                .font(.title)
+                .padding()
         }
         .sheet(isPresented: $showHelp) {
             HelpView()
