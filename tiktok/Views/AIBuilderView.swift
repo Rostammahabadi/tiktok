@@ -51,61 +51,126 @@ struct AIBuilderView: View {
                             // Basic Information Section
                             formSection("Basic Information") {
                                 CustomTextField(
-                                    placeholder: "Subject (e.g., Mathematics, Science)",
+                                    placeholder: "Subject (e.g., Mathematics)",
                                     text: $subject,
                                     isSecure: false,
                                     style: .darkTransparent
                                 )
                                 
                                 CustomTextField(
-                                    placeholder: "Specific Topic (e.g., Pythagorean Theorem)",
+                                    placeholder: "Topic (e.g., Fractions)",
                                     text: $topic,
                                     isSecure: false,
                                     style: .darkTransparent
                                 )
                                 
-                                Picker("Target Age Group", selection: $targetAgeGroup) {
-                                    ForEach(AgeGroup.allCases) { group in
-                                        Text(group.description).tag(group)
+                                Menu {
+                                    Picker("Target Age Group", selection: $targetAgeGroup) {
+                                        ForEach(AgeGroup.allCases) { group in
+                                            Text(group.description).tag(group)
+                                        }
                                     }
+                                } label: {
+                                    HStack {
+                                        Text("Target Age Group")
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        Text(targetAgeGroup.description)
+                                            .foregroundColor(.white.opacity(0.7))
+                                        Image(systemName: "chevron.down")
+                                            .foregroundColor(.white.opacity(0.7))
+                                    }
+                                    .padding()
+                                    .background(Color.black.opacity(0.2))
+                                    .cornerRadius(10)
                                 }
-                                .pickerStyle(.menu)
-                                .tint(.white)
                             }
                             
                             // Video Style Section
                             formSection("Video Style") {
-                                Picker("Duration", selection: $videoDuration) {
-                                    ForEach(Duration.allCases) { duration in
-                                        Text(duration.description).tag(duration)
+                                Menu {
+                                    Picker("Duration", selection: $videoDuration) {
+                                        ForEach(Duration.allCases) { duration in
+                                            Text(duration.description).tag(duration)
+                                        }
                                     }
+                                } label: {
+                                    HStack {
+                                        Text("Duration")
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        Text(videoDuration.description)
+                                            .foregroundColor(.white.opacity(0.7))
+                                        Image(systemName: "chevron.down")
+                                            .foregroundColor(.white.opacity(0.7))
+                                    }
+                                    .padding()
+                                    .background(Color.black.opacity(0.2))
+                                    .cornerRadius(10)
                                 }
-                                .pickerStyle(.menu)
-                                .tint(.white)
                                 
-                                Picker("Teaching Style", selection: $teachingStyle) {
-                                    ForEach(TeachingStyle.allCases) { style in
-                                        Text(style.description).tag(style)
+                                Menu {
+                                    Picker("Teaching Style", selection: $teachingStyle) {
+                                        ForEach(TeachingStyle.allCases) { style in
+                                            Text(style.description).tag(style)
+                                        }
                                     }
+                                } label: {
+                                    HStack {
+                                        Text("Teaching Style")
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        Text(teachingStyle.description)
+                                            .foregroundColor(.white.opacity(0.7))
+                                        Image(systemName: "chevron.down")
+                                            .foregroundColor(.white.opacity(0.7))
+                                    }
+                                    .padding()
+                                    .background(Color.black.opacity(0.2))
+                                    .cornerRadius(10)
                                 }
-                                .pickerStyle(.menu)
-                                .tint(.white)
                                 
-                                Picker("Visual Style", selection: $visualStyle) {
-                                    ForEach(VisualStyle.allCases) { style in
-                                        Text(style.description).tag(style)
+                                Menu {
+                                    Picker("Visual Style", selection: $visualStyle) {
+                                        ForEach(VisualStyle.allCases) { style in
+                                            Text(style.description).tag(style)
+                                        }
                                     }
+                                } label: {
+                                    HStack {
+                                        Text("Visual Style")
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        Text(visualStyle.description)
+                                            .foregroundColor(.white.opacity(0.7))
+                                        Image(systemName: "chevron.down")
+                                            .foregroundColor(.white.opacity(0.7))
+                                    }
+                                    .padding()
+                                    .background(Color.black.opacity(0.2))
+                                    .cornerRadius(10)
                                 }
-                                .pickerStyle(.menu)
-                                .tint(.white)
                                 
-                                Picker("Pace", selection: $pacePreference) {
-                                    ForEach(PacePreference.allCases) { pace in
-                                        Text(pace.description).tag(pace)
+                                Menu {
+                                    Picker("Pace", selection: $pacePreference) {
+                                        ForEach(PacePreference.allCases) { pace in
+                                            Text(pace.description).tag(pace)
+                                        }
                                     }
+                                } label: {
+                                    HStack {
+                                        Text("Pace")
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        Text(pacePreference.description)
+                                            .foregroundColor(.white.opacity(0.7))
+                                        Image(systemName: "chevron.down")
+                                            .foregroundColor(.white.opacity(0.7))
+                                    }
+                                    .padding()
+                                    .background(Color.black.opacity(0.2))
+                                    .cornerRadius(10)
                                 }
-                                .pickerStyle(.menu)
-                                .tint(.white)
                             }
                             
                             // Additional Options Section
