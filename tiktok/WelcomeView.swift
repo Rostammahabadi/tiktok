@@ -105,26 +105,6 @@ struct WelcomeView: View {
                         .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
                     }
                     
-                    Button(action: {
-                        // Action for Apple login
-                    }) {
-                        HStack {
-                            Image(systemName: "apple.logo")
-                                .font(.title2)
-                            Text("Continue with Apple")
-                                .font(.headline)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.black.opacity(0.2))
-                        .cornerRadius(25)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 25)
-                                .stroke(Color.white, lineWidth: 1.5)
-                        )
-                        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
-                    }
                 }
                 .padding(.horizontal, 30)
                 
