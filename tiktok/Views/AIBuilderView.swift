@@ -3,6 +3,7 @@ import SwiftUI
 struct AIBuilderView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var viewModel = AIBuilderViewModel()
+    @FocusState private var focusedField: Field?
     
     // Form input states
     @State private var subject = ""
@@ -15,6 +16,7 @@ struct AIBuilderView: View {
     @State private var shouldIncludeExamples = true
     @State private var pacePreference = PacePreference.moderate
     @State private var showAdvancedOptions = false
+    @State private var keyboardHeight: CGFloat = 0
     
     // Matching gradient colors from app theme
     let gradientColors: [Color] = [
@@ -56,6 +58,7 @@ struct AIBuilderView: View {
                                     isSecure: false,
                                     style: .darkTransparent
                                 )
+                                .focused($focusedField, equals: .subject)
                                 
                                 CustomTextField(
                                     placeholder: "Topic (e.g., Fractions)",
@@ -63,6 +66,7 @@ struct AIBuilderView: View {
                                     isSecure: false,
                                     style: .darkTransparent
                                 )
+                                .focused($focusedField, equals: .topic)
                                 
                                 Menu {
                                     Picker("Target Age Group", selection: $targetAgeGroup) {
@@ -184,10 +188,112 @@ struct AIBuilderView: View {
                             
                             // Advanced Options (Collapsible)
                             DisclosureGroup("Advanced Options", isExpanded: $showAdvancedOptions) {
-                                // Add any advanced options here
-                                Text("Coming soon...")
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .padding(.top, 8)
+                                VStack(spacing: 16) {
+                                    // Language and Accessibility
+                                    Menu {
+                                        Picker("Language", selection: $viewModel.language) {
+                                            Text("English (US)").tag("en-US")
+                                            Text("English (UK)").tag("en-GB")
+                                            Text("Spanish").tag("es")
+                                            // Add more languages as needed
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text("Language")
+                                                .foregroundColor(.white)
+                                            Spacer()
+                                            Text(viewModel.languageDescription)
+                                                .foregroundColor(.white.opacity(0.7))
+                                            Image(systemName: "chevron.down")
+                                                .foregroundColor(.white.opacity(0.7))
+                                        }
+                                        .padding()
+                                        .background(Color.black.opacity(0.2))
+                                        .cornerRadius(10)
+                                    }
+
+                                    // Captions and Subtitles
+                                    Toggle("Auto-generate Captions", isOn: $viewModel.generateCaptions)
+                                        .tint(.white)
+                                    
+                                    if viewModel.generateCaptions {
+                                        Menu {
+                                            Picker("Caption Style", selection: $viewModel.captionStyle) {
+                                                Text("Standard").tag("standard")
+                                                Text("Large").tag("large")
+                                                Text("Dynamic").tag("dynamic")
+                                            }
+                                        } label: {
+                                            HStack {
+                                                Text("Caption Style")
+                                                    .foregroundColor(.white)
+                                                Spacer()
+                                                Text(viewModel.captionStyleDescription)
+                                                    .foregroundColor(.white.opacity(0.7))
+                                                Image(systemName: "chevron.down")
+                                                    .foregroundColor(.white.opacity(0.7))
+                                            }
+                                            .padding()
+                                            .background(Color.black.opacity(0.2))
+                                            .cornerRadius(10)
+                                        }
+                                    }
+
+                                    // Background Music
+                                    Toggle("Add Background Music", isOn: $viewModel.addBackgroundMusic)
+                                        .tint(.white)
+                                    
+                                    if viewModel.addBackgroundMusic {
+                                        Menu {
+                                            Picker("Music Genre", selection: $viewModel.musicGenre) {
+                                                Text("Educational").tag("educational")
+                                                Text("Upbeat").tag("upbeat")
+                                                Text("Calm").tag("calm")
+                                                Text("None").tag("none")
+                                            }
+                                        } label: {
+                                            HStack {
+                                                Text("Music Genre")
+                                                    .foregroundColor(.white)
+                                                Spacer()
+                                                Text(viewModel.musicGenreDescription)
+                                                    .foregroundColor(.white.opacity(0.7))
+                                                Image(systemName: "chevron.down")
+                                                    .foregroundColor(.white.opacity(0.7))
+                                            }
+                                            .padding()
+                                            .background(Color.black.opacity(0.2))
+                                            .cornerRadius(10)
+                                        }
+                                        
+                                        Slider(value: $viewModel.musicVolume, in: 0...100, step: 5)
+                                            .tint(.white)
+                                        HStack {
+                                            Text("Music Volume: \(Int(viewModel.musicVolume))%")
+                                                .foregroundColor(.white)
+                                            Spacer()
+                                        }
+                                    }
+
+                                    // Visual Enhancements
+                                    Toggle("Auto-enhance Video", isOn: $viewModel.autoEnhanceVideo)
+                                        .tint(.white)
+                                    
+                                    // Learning Objectives
+                                    Toggle("Include Learning Objectives", isOn: $viewModel.includeLearningObjectives)
+                                        .tint(.white)
+                                    
+                                    if viewModel.includeLearningObjectives {
+                                        CustomTextField(
+                                            placeholder: "Learning Objectives (comma-separated)",
+                                            text: $viewModel.learningObjectives,
+                                            isSecure: false,
+                                            style: .darkTransparent
+                                        )
+                                        .focused($focusedField, equals: .objectives)
+                                    }
+                                }
+                                .padding(.top, 8)
                             }
                             .accentColor(.white)
                             .foregroundColor(.white)
@@ -234,6 +340,31 @@ struct AIBuilderView: View {
                         
                         Spacer()
                     }
+                    .padding(.bottom, keyboardHeight)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                
+                // Keyboard dismiss button
+                if keyboardHeight > 0 {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                focusedField = nil
+                            }) {
+                                Image(systemName: "keyboard.chevron.compact.down")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.white)
+                                    .padding(12)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                                    .shadow(radius: 3)
+                            }
+                            .padding(.trailing)
+                            .padding(.bottom, keyboardHeight)
+                        }
+                    }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -247,6 +378,23 @@ struct AIBuilderView: View {
                 }
             }
         }
+        .onAppear {
+            NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { notification in
+                let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect ?? .zero
+                keyboardHeight = keyboardFrame.height
+            }
+            
+            NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { _ in
+                keyboardHeight = 0
+            }
+        }
+    }
+    
+    // MARK: - Field Enum for Focus State
+    private enum Field {
+        case subject
+        case topic
+        case objectives
     }
     
     private func formSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -263,6 +411,23 @@ struct AIBuilderView: View {
 class AIBuilderViewModel: ObservableObject {
     @Published var isGenerating = false
     @Published var error: Error?
+    
+    @Published var language: String = "en-US"
+    @Published var languageDescription: String = "English (US)"
+    
+    @Published var generateCaptions: Bool = false
+    @Published var captionStyle: String = "standard"
+    @Published var captionStyleDescription: String = "Standard"
+    
+    @Published var addBackgroundMusic: Bool = false
+    @Published var musicGenre: String = "none"
+    @Published var musicGenreDescription: String = "None"
+    @Published var musicVolume: Double = 50
+    
+    @Published var autoEnhanceVideo: Bool = false
+    
+    @Published var includeLearningObjectives: Bool = false
+    @Published var learningObjectives: String = ""
     
     func generateVideo(
         subject: String,
