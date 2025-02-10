@@ -191,10 +191,7 @@ struct CreateView: View {
              }
         }
         .sheet(isPresented: $showAIBuilder) {
-            // TODO: Add AIBuilderView here
-            Text("AI Builder Coming Soon")
-                .font(.title)
-                .padding()
+            AIBuilderView()
         }
         .sheet(isPresented: $showHelp) {
             HelpView()
