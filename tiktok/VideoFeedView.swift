@@ -119,6 +119,7 @@ struct VideoPlayerView: View {
     @State private var isUsingFallback = false
     @State private var isPlaying = false
     @State private var isReadyToPlay = false
+    @State private var setupTask: Task<Void, Never>?
     
     var body: some View {
         GeometryReader { geometry in
@@ -133,7 +134,8 @@ struct VideoPlayerView: View {
                         if !isUsingFallback, video.originalUrl != nil {
                             Button("Try Original Video") {
                                 isUsingFallback = true
-                                Task {
+                                setupTask?.cancel()
+                                setupTask = Task {
                                     await setupPlayer(useOriginal: true)
                                 }
                             }
@@ -181,26 +183,63 @@ struct VideoPlayerView: View {
         .onChange(of: isActive) { newValue in
             if newValue {
                 print("📱 Video became active")
-                if isReadyToPlay {
-                    player?.seek(to: .zero)
-                    player?.play()
-                    isPlaying = true
+                setupTask?.cancel()
+                setupTask = Task {
+                    await setupPlayer(useOriginal: false)
                 }
             } else {
                 print("📱 Video became inactive")
+                // Cancel any ongoing setup
+                setupTask?.cancel()
+                setupTask = nil
+                // Cleanup when video becomes inactive
                 player?.pause()
                 isPlaying = false
+                // Remove all observers
+                observers.forEach { $0.invalidate() }
+                observers.removeAll()
+                // Remove player item
+                player?.replaceCurrentItem(with: nil)
+                player = nil
+                playerItem = nil
+                isReadyToPlay = false
+                isLoading = false
             }
         }
         .onAppear {
             print("📱 VideoPlayerView appeared")
-            Task {
-                await setupPlayer(useOriginal: false)
+            if isActive {
+                setupTask?.cancel()
+                setupTask = Task {
+                    await setupPlayer(useOriginal: false)
+                }
             }
+        }
+        .onDisappear {
+            print("📱 VideoPlayerView disappeared")
+            // Cancel any ongoing setup
+            setupTask?.cancel()
+            setupTask = nil
+            // Cleanup on disappear
+            player?.pause()
+            isPlaying = false
+            observers.forEach { $0.invalidate() }
+            observers.removeAll()
+            player?.replaceCurrentItem(with: nil)
+            player = nil
+            playerItem = nil
+            isReadyToPlay = false
+            isLoading = false
         }
     }
     
     private func setupPlayer(useOriginal: Bool) async {
+        // Check if task is cancelled before starting
+        guard !Task.isCancelled else {
+            print("🚫 Setup cancelled before starting")
+            return
+        }
+        
         // Clear previous state
         error = nil
         isLoading = true
@@ -221,9 +260,21 @@ struct VideoPlayerView: View {
                 // First verify all segments exist
                 print("🔍 Verifying HLS segments...")
                 for segmentPath in segments {
+                    // Check for cancellation before each segment
+                    guard !Task.isCancelled else {
+                        print("🚫 Setup cancelled during segment verification")
+                        return
+                    }
+                    
                     let segmentRef = storage.reference().child(segmentPath)
                     _ = try await segmentRef.getMetadata()
                     print("✅ Verified segment: \(segmentPath)")
+                }
+                
+                // Check for cancellation before getting manifest
+                guard !Task.isCancelled else {
+                    print("🚫 Setup cancelled before manifest download")
+                    return
                 }
                 
                 // Get manifest URL
@@ -238,6 +289,12 @@ struct VideoPlayerView: View {
                         "AVURLAssetOutOfBandMIMETypeKey": "application/x-mpegURL"
                     ]
                 )
+                
+                // Check for cancellation before loading asset
+                guard !Task.isCancelled else {
+                    print("🚫 Setup cancelled before asset load")
+                    return
+                }
                 
                 // Load and validate HLS content
                 try await asset.load(.tracks, .duration)
@@ -279,6 +336,12 @@ struct VideoPlayerView: View {
                 }
                 observers.append(playbackLikelyObservation)
                 
+                // Final cancellation check before updating UI
+                guard !Task.isCancelled else {
+                    print("🚫 Setup cancelled before player setup")
+                    return
+                }
+                
                 await MainActor.run {
                     self.player = newPlayer
                     self.isLoading = false
@@ -299,13 +362,22 @@ struct VideoPlayerView: View {
                 print("🎬 Using original video URL: \(originalUrl)")
                 
                 let asset = AVURLAsset(url: originalUrl)
+                
+                // Check for cancellation before loading asset
+                guard !Task.isCancelled else {
+                    print("🚫 Setup cancelled before asset load")
+                    return
+                }
+                
                 try await asset.load(.tracks, .duration)
                 
                 let playerItem = AVPlayerItem(asset: asset)
                 let newPlayer = AVPlayer(playerItem: playerItem)
                 
-                let observation = playerItem.observe(\.status) { item, _ in
+                // Add status observation
+                let statusObservation = playerItem.observe(\.status) { item, _ in
                     if item.status == .readyToPlay {
+                        print("✅ Original video ready to play")
                         Task { @MainActor in
                             self.isReadyToPlay = true
                             if self.isActive {
@@ -315,7 +387,13 @@ struct VideoPlayerView: View {
                         }
                     }
                 }
-                observers.append(observation)
+                observers.append(statusObservation)
+                
+                // Final cancellation check before updating UI
+                guard !Task.isCancelled else {
+                    print("🚫 Setup cancelled before player setup")
+                    return
+                }
                 
                 await MainActor.run {
                     self.player = newPlayer
@@ -332,15 +410,18 @@ struct VideoPlayerView: View {
                     newPlayer?.seek(to: .zero)
                     newPlayer?.play()
                 }
-            } else {
-                throw NSError(domain: "VideoPlayer", code: -1, userInfo: [NSLocalizedDescriptionKey: "No valid video URL"])
             }
         } catch {
+            // Only update UI if not cancelled
+            guard !Task.isCancelled else {
+                print("🚫 Setup cancelled after error")
+                return
+            }
+            
             print("❌ Error setting up player: \(error.localizedDescription)")
             await MainActor.run {
                 self.error = error
                 self.isLoading = false
-                self.isReadyToPlay = false
             }
         }
     }
