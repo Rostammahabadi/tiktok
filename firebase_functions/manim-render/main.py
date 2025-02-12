@@ -40,6 +40,7 @@ def fix_manim_code(raw_code):
         "Remove or omit any 'line_spacing' parameters for Text or MathTex. "
         "If line_spacing is not explicitly provided, add it. "
         "No triple backticks or commentary—only valid Python code with correct indentation. "
+        "and remove all 'line_spacing' references altogether."
     )
 
     user_prompt = f"Here is the original code:\n\n{raw_code}\n\nPlease fix it now."
@@ -123,7 +124,6 @@ def render_and_upload():
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=300,  # e.g. 2 minutes
             env=env
         )
         print("[DEBUG] Manim output (stdout):", result.stdout)
@@ -145,19 +145,39 @@ def render_and_upload():
         print("[ERROR] No .mp4 found in expected paths.")
         return _json_resp({"error": "No .mp4 found"}, 500)
 
-    # 5) Upload final to GCS
-    print(f"[DEBUG] Uploading final video to gs://{out_bucket}/{out_path}")
+    # === NEW STEP: Convert .mp4 to .mov via ffmpeg ===
+    mov_path = os.path.splitext(video_path)[0] + ".mov"
     try:
+        convert_cmd = [
+            "ffmpeg",
+            "-i", video_path,
+            "-c:v", "copy",
+            "-c:a", "copy",
+            mov_path
+        ]
+        print("[DEBUG] Converting MP4 to MOV:", convert_cmd)
+        subprocess.run(convert_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except Exception as e:
+        print("[ERROR] Failed to convert .mp4 to .mov:", e)
+        return _json_resp({"error": "FFmpeg conversion failed", "details": str(e)}, 500)
+
+
+    # 5) Upload final .mov to GCS
+    #    (We assume `out_path` is e.g. "videos/final_lesson.mov")
+    print(f"[DEBUG] Uploading final .mov to gs://{out_bucket}/{out_path}")
+    try:
+        final_gcs_name = os.path.splitext(out_path)[0] + ".mov"
         out_client = storage.Client()
         out_b = out_client.bucket(out_bucket)
-        out_blob = out_b.blob(out_path)
-        out_blob.upload_from_filename(video_path, content_type="video/mp4")
+        out_blob = out_b.blob(final_gcs_name)
+        # Use "video/quicktime" as the correct content type for MOV
+        out_blob.upload_from_filename(mov_path, content_type="video/quicktime")
     except Exception as e:
-        print("[ERROR] Could not upload final video to GCS:", e)
+        print("[ERROR] Could not upload final .mov to GCS:", e)
         return _json_resp({"error": "Upload to GCS failed", "details": str(e)}, 500)
 
     elapsed = time.time() - start_time
-    print(f"[DEBUG] Successfully rendered & uploaded video in {elapsed:.2f} seconds.")
+    print(f"[DEBUG] Successfully rendered, converted & uploaded .mov in {elapsed:.2f} seconds.")
     return _json_resp({"finalVideoUrl": f"gs://{out_bucket}/{out_path}"}, 200)
 
 def find_manim_output(tmp_py_path, scene_name):

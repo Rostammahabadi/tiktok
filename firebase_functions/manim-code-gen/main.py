@@ -25,16 +25,26 @@ def script_creation_gcf(request: Request):
       "manim_code": "python code with voiceover using manim-voiceover"
     }
     """
+
+    print("[DEBUG] Received request with method:", request.method)
     if request.method != "POST":
+        print("[ERROR] Request method not allowed:", request.method)
         return make_response(("Method not allowed", 405))
 
+    # Check for OpenAI API key
     openai.api_key = os.environ.get("OPENAI_API_KEY", "")
     if not openai.api_key:
+        print("[ERROR] Missing OPENAI_API_KEY environment variable.")
         return _json_response({"error": "Missing OPENAI_API_KEY env var"}, 400)
+    else:
+        print("[DEBUG] Found OPENAI_API_KEY in environment variables.")
 
+    # Try to parse JSON
     try:
         data = request.get_json(silent=True) or {}
-    except:
+        print("[DEBUG] Parsed JSON data:", data)
+    except Exception as e:
+        print("[ERROR] Could not parse JSON:", e)
         return _json_response({"error": "Invalid JSON"}, 400)
 
     subject = data.get("subject", "Unknown Subject")
@@ -44,39 +54,66 @@ def script_creation_gcf(request: Request):
     include_quiz = data.get("includeQuiz", False)
     include_examples = data.get("includeExamples", False)
 
-    # 1) Create a short TTS-friendly script with ChatCompletion
-    #    (Similar to your original logic)
+    print("[DEBUG] Extracted parameters:")
+    print("        subject      =", subject)
+    print("        topic        =", topic)
+    print("        age_group    =", age_group)
+    print("        duration     =", duration)
+    print("        include_quiz =", include_quiz)
+    print("        include_examples =", include_examples)
+
     system_prompt_1 = (
         "You are an expert educational script writer. "
-        "Write a concise, natural-sounding voiceover script for text-to-speech. "
-        "Do not include stage directions or 'End of lesson'. "
-        "Use minimal new lines and keep the language straightforward. "
-        "If a quiz is included, place it at the very end with a short phrase leading into it, e.g., 'Now here's your quiz'. "
-        "Return only raw text—no disclaimers."
+        "Generate a concise, natural-sounding voiceover script for text-to-speech. "
+        "Do not include code, disclaimers, or stage directions. "
+        "If includeQuiz is true, end with a short 'Now here's your quiz' line. "
+        "Return only the raw text of the script—no extra commentary."
     )
+
     user_prompt_1 = (
         f"Write a script to teach {topic} in {subject}, aimed at {age_group}, duration {duration}, "
         f"includeQuiz={include_quiz}, includeExamples={include_examples}. "
         "Output one paragraph, TTS-friendly, end with quiz if includeQuiz=True. "
         "No stage directions."
     )
-    client = wrap_openai(openai)
+
+    # -------------------------------------------------------------------------
+    # Step 1) Create a short TTS-friendly script with ChatCompletion
+    # NOTE: The code references system_prompt_1 and user_prompt_1, but they're
+    #       not defined in the snippet you provided. Replace or define them
+    #       appropriately if you need this step, or remove it if not needed.
+    # -------------------------------------------------------------------------
+    # For example:
+    #
+    # system_prompt_1 = "You are a helpful assistant..."
+    # user_prompt_1 = "Write a short TTS-friendly script about..."
+    #
+    # If you don't need them, remove the block below.
+    # -------------------------------------------------------------------------
+
+    print("[DEBUG] Starting Step 1: Creating short TTS-friendly script")
     try:
-        resp_1 = client.chat.completions.create(
+        # Make sure system_prompt_1 and user_prompt_1 are defined somewhere
+        resp_1 = wrap_openai(openai).chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": system_prompt_1},
-                {"role": "user", "content": user_prompt_1},
+                {"role": "system", "content": system_prompt_1},  # <-- Define or remove
+                {"role": "user", "content": user_prompt_1},      # <-- Define or remove
             ],
             temperature=0.7,
         )
         script_text = resp_1.choices[0].message.content
+        print("[DEBUG] Successfully created TTS-friendly script. Length:", len(script_text))
+    except NameError as e:
+        print("[ERROR] system_prompt_1 or user_prompt_1 not defined:", e)
+        return _json_response({"error": "system_prompt_1 or user_prompt_1 not defined", "details": str(e)}, 500)
     except Exception as e:
+        print("[ERROR] Script generation error:", e)
         return _json_response({"error": f"Script generation error: {str(e)}"}, 500)
 
-    # 2) Take the generated script_text and embed it in Manim code
-    #    that uses the manim-voiceover plugin with OpenAIService
-    #    We'll instruct GPT again to produce actual manim code:
+    # -------------------------------------------------------------------------
+    # Step 2) Generate full Manim code with voiceover via GPT
+    # -------------------------------------------------------------------------
     system_prompt_2 = (
         "You are an advanced Manim developer using manim-voiceover with ElevenLabsService. "
         "Given the text, produce a Python script that:\n"
@@ -104,8 +141,9 @@ def script_creation_gcf(request: Request):
         "No triple backticks, no commentary—just raw Python code."
     )
 
+    print("[DEBUG] Starting Step 2: Generating Manim code with voiceover")
     try:
-        resp_2 = client.chat.completions.create(
+        resp_2 = wrap_openai(openai).chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt_2},
@@ -114,13 +152,22 @@ def script_creation_gcf(request: Request):
             temperature=0.7,
         )
         manim_code = resp_2.choices[0].message.content
+        print("[DEBUG] Successfully generated Manim code. Length:", len(manim_code))
     except Exception as e:
+        print("[ERROR] Manim code generation error:", e)
         return _json_response({"error": f"Manim code generation error: {str(e)}"}, 500)
 
-    # Return the final manim code with voiceover
-    return _json_response({"manim_code": manim_code}, 200)
+    # -------------------------------------------------------------------------
+    # Final: Return the manim code
+    # -------------------------------------------------------------------------
+    print("[DEBUG] Returning final Manim code in JSON response.")
+    return _json_response({"manim_code": manim_code, "script_text": script_text}, 200)
 
 def _json_response(body, status=200):
+    """
+    Helper to return a JSON response for Cloud Functions.
+    """
+    print(f"[DEBUG] _json_response called with status={status} and body={body}")
     response = make_response((json.dumps(body), status))
     response.headers["Content-Type"] = "application/json"
     return response

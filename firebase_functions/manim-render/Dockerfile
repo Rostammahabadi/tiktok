@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     meson \
+    ffmpeg \
     ninja-build \
     libcairo2-dev \
     libpango1.0-dev \
