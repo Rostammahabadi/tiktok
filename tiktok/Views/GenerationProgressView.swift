@@ -48,19 +48,11 @@ struct GenerationProgressView: View {
                         .font(.title2)
                         .fontWeight(.bold)
                     
-                    if progress.currentStep == .scriptGeneration {
-                        Text(progress.message)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    } else {
-                        Text(progress.currentStep.description)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
+                    Text(progress.message.isEmpty ? progress.currentStep.description : progress.message)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
                 }
                 
                 if progress.currentStep == .scriptApproval {
@@ -154,7 +146,7 @@ struct GenerationProgressView: View {
                                         .foregroundColor(step.id <= progress.currentStep.id ? .primary : .secondary)
                                     
                                     if step.id == progress.currentStep.id {
-                                        Text(step.description)
+                                        Text(progress.message.isEmpty ? step.description : progress.message)
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
@@ -173,6 +165,20 @@ struct GenerationProgressView: View {
                         }
                     }
                     .padding(.vertical)
+                }
+                
+                if progress.currentStep == .complete {
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Label("Done", systemImage: "checkmark")
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    .padding(.horizontal)
                 }
                 
                 Spacer()

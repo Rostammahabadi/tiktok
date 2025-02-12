@@ -376,19 +376,11 @@ class AIBuilderViewModel: ObservableObject {
                 generationProgress.currentStep = .videoRendering
                 generationProgress.message = "Rendering your educational video..."
             }
-            let videoURL = try await renderVideo(manimCode: generationProgress.manimCode)
             
-            // Step 2: Download and save video
-            await MainActor.run {
-                generationProgress.currentStep = .videoDownload
-                generationProgress.message = "Downloading and saving video..."
-            }
+            let videoURL = try await renderVideo(manimCode: generationProgress.manimCode)
             let savedURL = try await downloadAndSaveVideo(fromURL: videoURL)
             
-            // Step 3: Update final state
             await MainActor.run {
-                generationProgress.currentStep = .complete
-                generationProgress.message = "Video generation complete!"
                 savedVideoURL = savedURL
                 isGenerating = false
             }
@@ -514,6 +506,11 @@ class AIBuilderViewModel: ObservableObject {
                 throw GenerationError.renderingFailed("Invalid response format")
             }
             
+            // Successfully rendered video, update to download step
+            await MainActor.run {
+                generationProgress.currentStep = .videoDownload
+            }
+            
             return videoURL
             
         } catch {
@@ -559,6 +556,11 @@ class AIBuilderViewModel: ObservableObject {
         
         // Clean up temp file
         try? FileManager.default.removeItem(at: localURL)
+        
+        // Successfully downloaded and saved video, update to complete
+        await MainActor.run {
+            generationProgress.currentStep = .complete
+        }
         
         return savedURL
     }
