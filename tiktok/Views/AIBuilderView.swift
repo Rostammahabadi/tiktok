@@ -10,11 +10,7 @@ struct AIBuilderView: View {
     @State private var topic = ""
     @State private var targetAgeGroup = AgeGroup.middleSchool
     @State private var videoDuration = Duration.short
-    @State private var teachingStyle = TeachingStyle.engaging
-    @State private var visualStyle = VisualStyle.modern
     @State private var includeQuiz = false
-    @State private var shouldIncludeExamples = true
-    @State private var pacePreference = PacePreference.moderate
     @State private var showAdvancedOptions = false
     @State private var keyboardHeight: CGFloat = 0
     
@@ -112,192 +108,13 @@ struct AIBuilderView: View {
                                     .background(Color.black.opacity(0.2))
                                     .cornerRadius(10)
                                 }
-                                
-                                Menu {
-                                    Picker("Teaching Style", selection: $teachingStyle) {
-                                        ForEach(TeachingStyle.allCases) { style in
-                                            Text(style.description).tag(style)
-                                        }
-                                    }
-                                } label: {
-                                    HStack {
-                                        Text("Teaching Style")
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        Text(teachingStyle.description)
-                                            .foregroundColor(.white.opacity(0.7))
-                                        Image(systemName: "chevron.down")
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                    .padding()
-                                    .background(Color.black.opacity(0.2))
-                                    .cornerRadius(10)
-                                }
-                                
-                                Menu {
-                                    Picker("Visual Style", selection: $visualStyle) {
-                                        ForEach(VisualStyle.allCases) { style in
-                                            Text(style.description).tag(style)
-                                        }
-                                    }
-                                } label: {
-                                    HStack {
-                                        Text("Visual Style")
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        Text(visualStyle.description)
-                                            .foregroundColor(.white.opacity(0.7))
-                                        Image(systemName: "chevron.down")
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                    .padding()
-                                    .background(Color.black.opacity(0.2))
-                                    .cornerRadius(10)
-                                }
-                                
-                                Menu {
-                                    Picker("Pace", selection: $pacePreference) {
-                                        ForEach(PacePreference.allCases) { pace in
-                                            Text(pace.description).tag(pace)
-                                        }
-                                    }
-                                } label: {
-                                    HStack {
-                                        Text("Pace")
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        Text(pacePreference.description)
-                                            .foregroundColor(.white.opacity(0.7))
-                                        Image(systemName: "chevron.down")
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                    .padding()
-                                    .background(Color.black.opacity(0.2))
-                                    .cornerRadius(10)
-                                }
                             }
                             
                             // Additional Options Section
                             formSection("Additional Options") {
                                 Toggle("Include Interactive Quiz", isOn: $includeQuiz)
                                     .tint(.white)
-                                
-                                Toggle("Include Real-world Examples", isOn: $shouldIncludeExamples)
-                                    .tint(.white)
                             }
-                            
-                            // Advanced Options (Collapsible)
-                            DisclosureGroup("Advanced Options", isExpanded: $showAdvancedOptions) {
-                                VStack(spacing: 16) {
-                                    // Language and Accessibility
-                                    Menu {
-                                        Picker("Language", selection: $viewModel.language) {
-                                            Text("English (US)").tag("en-US")
-                                            Text("English (UK)").tag("en-GB")
-                                            Text("Spanish").tag("es")
-                                            // Add more languages as needed
-                                        }
-                                    } label: {
-                                        HStack {
-                                            Text("Language")
-                                                .foregroundColor(.white)
-                                            Spacer()
-                                            Text(viewModel.languageDescription)
-                                                .foregroundColor(.white.opacity(0.7))
-                                            Image(systemName: "chevron.down")
-                                                .foregroundColor(.white.opacity(0.7))
-                                        }
-                                        .padding()
-                                        .background(Color.black.opacity(0.2))
-                                        .cornerRadius(10)
-                                    }
-
-                                    // Captions and Subtitles
-                                    Toggle("Auto-generate Captions", isOn: $viewModel.generateCaptions)
-                                        .tint(.white)
-                                    
-                                    if viewModel.generateCaptions {
-                                        Menu {
-                                            Picker("Caption Style", selection: $viewModel.captionStyle) {
-                                                Text("Standard").tag("standard")
-                                                Text("Large").tag("large")
-                                                Text("Dynamic").tag("dynamic")
-                                            }
-                                        } label: {
-                                            HStack {
-                                                Text("Caption Style")
-                                                    .foregroundColor(.white)
-                                                Spacer()
-                                                Text(viewModel.captionStyleDescription)
-                                                    .foregroundColor(.white.opacity(0.7))
-                                                Image(systemName: "chevron.down")
-                                                    .foregroundColor(.white.opacity(0.7))
-                                            }
-                                            .padding()
-                                            .background(Color.black.opacity(0.2))
-                                            .cornerRadius(10)
-                                        }
-                                    }
-
-                                    // Background Music
-                                    Toggle("Add Background Music", isOn: $viewModel.addBackgroundMusic)
-                                        .tint(.white)
-                                    
-                                    if viewModel.addBackgroundMusic {
-                                        Menu {
-                                            Picker("Music Genre", selection: $viewModel.musicGenre) {
-                                                Text("Educational").tag("educational")
-                                                Text("Upbeat").tag("upbeat")
-                                                Text("Calm").tag("calm")
-                                                Text("None").tag("none")
-                                            }
-                                        } label: {
-                                            HStack {
-                                                Text("Music Genre")
-                                                    .foregroundColor(.white)
-                                                Spacer()
-                                                Text(viewModel.musicGenreDescription)
-                                                    .foregroundColor(.white.opacity(0.7))
-                                                Image(systemName: "chevron.down")
-                                                    .foregroundColor(.white.opacity(0.7))
-                                            }
-                                            .padding()
-                                            .background(Color.black.opacity(0.2))
-                                            .cornerRadius(10)
-                                        }
-                                        
-                                        Slider(value: $viewModel.musicVolume, in: 0...100, step: 5)
-                                            .tint(.white)
-                                        HStack {
-                                            Text("Music Volume: \(Int(viewModel.musicVolume))%")
-                                                .foregroundColor(.white)
-                                            Spacer()
-                                        }
-                                    }
-
-                                    // Visual Enhancements
-                                    Toggle("Auto-enhance Video", isOn: $viewModel.autoEnhanceVideo)
-                                        .tint(.white)
-                                    
-                                    // Learning Objectives
-                                    Toggle("Include Learning Objectives", isOn: $viewModel.includeLearningObjectives)
-                                        .tint(.white)
-                                    
-                                    if viewModel.includeLearningObjectives {
-                                        CustomTextField(
-                                            placeholder: "Learning Objectives (comma-separated)",
-                                            text: $viewModel.learningObjectives,
-                                            isSecure: false,
-                                            style: .darkTransparent
-                                        )
-                                        .focused($focusedField, equals: .objectives)
-                                    }
-                                }
-                                .padding(.top, 8)
-                            }
-                            .accentColor(.white)
-                            .foregroundColor(.white)
-                            .padding(.vertical, 8)
                         }
                         .padding()
                         .background(Color.black.opacity(0.2))
@@ -312,11 +129,7 @@ struct AIBuilderView: View {
                                     topic: topic,
                                     ageGroup: targetAgeGroup,
                                     duration: videoDuration,
-                                    teachingStyle: teachingStyle,
-                                    visualStyle: visualStyle,
-                                    includeQuiz: includeQuiz,
-                                    includeExamples: shouldIncludeExamples,
-                                    pace: pacePreference
+                                    includeQuiz: includeQuiz
                                 )
                             }
                         }) {
@@ -394,7 +207,6 @@ struct AIBuilderView: View {
     private enum Field {
         case subject
         case topic
-        case objectives
     }
     
     private func formSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -412,33 +224,12 @@ class AIBuilderViewModel: ObservableObject {
     @Published var isGenerating = false
     @Published var error: Error?
     
-    @Published var language: String = "en-US"
-    @Published var languageDescription: String = "English (US)"
-    
-    @Published var generateCaptions: Bool = false
-    @Published var captionStyle: String = "standard"
-    @Published var captionStyleDescription: String = "Standard"
-    
-    @Published var addBackgroundMusic: Bool = false
-    @Published var musicGenre: String = "none"
-    @Published var musicGenreDescription: String = "None"
-    @Published var musicVolume: Double = 50
-    
-    @Published var autoEnhanceVideo: Bool = false
-    
-    @Published var includeLearningObjectives: Bool = false
-    @Published var learningObjectives: String = ""
-    
     func generateVideo(
         subject: String,
         topic: String,
         ageGroup: AgeGroup,
         duration: Duration,
-        teachingStyle: TeachingStyle,
-        visualStyle: VisualStyle,
-        includeQuiz: Bool,
-        includeExamples: Bool,
-        pace: PacePreference
+        includeQuiz: Bool
     ) async {
         // TODO: Implement video generation logic
         print("Generating video with parameters:")
@@ -446,11 +237,7 @@ class AIBuilderViewModel: ObservableObject {
         print("Topic: \(topic)")
         print("Age Group: \(ageGroup)")
         print("Duration: \(duration)")
-        print("Teaching Style: \(teachingStyle)")
-        print("Visual Style: \(visualStyle)")
         print("Include Quiz: \(includeQuiz)")
-        print("Include Examples: \(includeExamples)")
-        print("Pace: \(pace)")
     }
 }
 
@@ -487,62 +274,6 @@ enum Duration: String, CaseIterable, Identifiable {
         case .short: return "Short (30-60 sec)"
         case .medium: return "Medium (1-2 min)"
         case .long: return "Long (2-3 min)"
-        }
-    }
-}
-
-enum TeachingStyle: String, CaseIterable, Identifiable {
-    case engaging = "engaging"
-    case formal = "formal"
-    case conversational = "conversational"
-    case storytelling = "storytelling"
-    case interactive = "interactive"
-    
-    var id: String { rawValue }
-    
-    var description: String {
-        switch self {
-        case .engaging: return "Engaging & Dynamic"
-        case .formal: return "Formal & Professional"
-        case .conversational: return "Conversational"
-        case .storytelling: return "Story-based"
-        case .interactive: return "Interactive"
-        }
-    }
-}
-
-enum VisualStyle: String, CaseIterable, Identifiable {
-    case modern = "modern"
-    case minimalist = "minimalist"
-    case playful = "playful"
-    case traditional = "traditional"
-    case infographic = "infographic"
-    
-    var id: String { rawValue }
-    
-    var description: String {
-        switch self {
-        case .modern: return "Modern & Clean"
-        case .minimalist: return "Minimalist"
-        case .playful: return "Playful & Animated"
-        case .traditional: return "Traditional"
-        case .infographic: return "Infographic Style"
-        }
-    }
-}
-
-enum PacePreference: String, CaseIterable, Identifiable {
-    case slow = "slow"
-    case moderate = "moderate"
-    case fast = "fast"
-    
-    var id: String { rawValue }
-    
-    var description: String {
-        switch self {
-        case .slow: return "Slow & Detailed"
-        case .moderate: return "Moderate"
-        case .fast: return "Fast-paced"
         }
     }
 }

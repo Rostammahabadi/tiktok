@@ -1,0 +1,10 @@
+openai==1.62.0
+firebase-functions==0.4.2
+requests==2.31.0
+functions-framework==3.4.0
+flask==2.2.5
+google-auth==2.22.0
+google-auth-oauthlib==1.0.0
+langsmith
+google-auth-httplib2
+langsmith
