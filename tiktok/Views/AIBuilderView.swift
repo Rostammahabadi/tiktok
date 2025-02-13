@@ -614,17 +614,29 @@ class AIBuilderViewModel: ObservableObject {
                                     let videoId = originalFileName.replacingOccurrences(of: ".mov", with: "")
                                     let videoPath = "videos/original/\(videoId).mp4" // Match the path pattern from SaveVideoToRemoteURL
                                     
-                                    // Generate thumbnail
+                                    // Generate thumbnail and save both locally and remotely
                                     print("📸 Generating thumbnail...")
                                     let thumbnailData = try? await SaveVideoToLocalURL().generateThumbnail(from: savedURL)
                                     var thumbnailURL: URL?
                                     if let thumbnailData = thumbnailData {
+                                        // Save thumbnail locally
+                                        let docsURL = try FileManager.default.url(for: .documentDirectory,
+                                                                              in: .userDomainMask,
+                                                                              appropriateFor: nil,
+                                                                              create: true)
+                                        let projectFolder = docsURL.appendingPathComponent("LocalProjects/\(projectId)", isDirectory: true)
+                                        try FileManager.default.createDirectory(at: projectFolder, withIntermediateDirectories: true)
+                                        
+                                        let localThumbnailURL = projectFolder.appendingPathComponent("thumbnail.jpeg")
+                                        try thumbnailData.write(to: localThumbnailURL)
+                                        print("✅ Saved local thumbnail to: \(localThumbnailURL.path)")
+                                        
                                         // Save thumbnail to Firebase Storage
                                         let thumbnailPath = "videos/thumbnails/\(videoId).jpg"
                                         let thumbnailRef = Storage.storage().reference().child(thumbnailPath)
                                         try await thumbnailRef.putDataAsync(thumbnailData)
                                         thumbnailURL = try await thumbnailRef.downloadURL()
-                                        print("✅ Saved thumbnail to: \(thumbnailPath)")
+                                        print("✅ Saved remote thumbnail to: \(thumbnailPath)")
                                     }
                                     
                                     // Create Firestore doc for the video
