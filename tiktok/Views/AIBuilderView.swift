@@ -618,15 +618,24 @@ class AIBuilderViewModel: ObservableObject {
                                     print("📸 Generating thumbnail...")
                                     let thumbnailData = try? await SaveVideoToLocalURL().generateThumbnail(from: savedURL)
                                     var thumbnailURL: URL?
+                                    
+                                    // Create local project structure
+                                    let docsURL = try FileManager.default.url(for: .documentDirectory,
+                                                                          in: .userDomainMask,
+                                                                          appropriateFor: nil,
+                                                                          create: true)
+                                    let projectFolder = docsURL.appendingPathComponent("LocalProjects/\(projectId)", isDirectory: true)
+                                    try FileManager.default.createDirectory(at: projectFolder, withIntermediateDirectories: true)
+                                    
+                                    // Save video in videos/0
+                                    let videosFolder = projectFolder.appendingPathComponent("videos", isDirectory: true)
+                                    try FileManager.default.createDirectory(at: videosFolder, withIntermediateDirectories: true)
+                                    let localVideoPath = videosFolder.appendingPathComponent("0") // main video is always "0"
+                                    try FileManager.default.copyItem(at: savedURL, to: localVideoPath)
+                                    print("✅ Saved main video locally at: \(localVideoPath.path)")
+                                    
                                     if let thumbnailData = thumbnailData {
                                         // Save thumbnail locally
-                                        let docsURL = try FileManager.default.url(for: .documentDirectory,
-                                                                              in: .userDomainMask,
-                                                                              appropriateFor: nil,
-                                                                              create: true)
-                                        let projectFolder = docsURL.appendingPathComponent("LocalProjects/\(projectId)", isDirectory: true)
-                                        try FileManager.default.createDirectory(at: projectFolder, withIntermediateDirectories: true)
-                                        
                                         let localThumbnailURL = projectFolder.appendingPathComponent("thumbnail.jpeg")
                                         try thumbnailData.write(to: localThumbnailURL)
                                         print("✅ Saved local thumbnail to: \(localThumbnailURL.path)")
@@ -638,6 +647,39 @@ class AIBuilderViewModel: ObservableObject {
                                         thumbnailURL = try await thumbnailRef.downloadURL()
                                         print("✅ Saved remote thumbnail to: \(thumbnailPath)")
                                     }
+                                    
+                                    // Create and save project.json
+                                    let mainSegment = LocalSegment(
+                                        segmentId: videoId,
+                                        localFilePath: "videos/0", // relative path
+                                        startTime: 0,
+                                        endTime: nil,
+                                        order: 0
+                                    )
+                                    
+                                    let localProject = LocalProject(
+                                        projectId: projectId,
+                                        authorId: userId,
+                                        createdAt: Date(),
+                                        isDeleted: false,
+                                        mainVideoId: videoId,
+                                        mainVideoFilePath: "videos/0", // relative path
+                                        mainThumbnailFilePath: "thumbnail.jpeg",
+                                        segments: [mainSegment], // Include main video as a segment
+                                        serialization: nil // AI video has no initial serialization
+                                    )
+                                    
+                                    let projectJSONURL = projectFolder.appendingPathComponent("project.json")
+                                    let encoder = JSONEncoder()
+                                    encoder.dateEncodingStrategy = .iso8601
+                                    encoder.outputFormatting = .prettyPrinted
+                                    let encodedProj = try encoder.encode(localProject)
+                                    
+                                    if FileManager.default.fileExists(atPath: projectJSONURL.path) {
+                                        try FileManager.default.removeItem(at: projectJSONURL)
+                                    }
+                                    try encodedProj.write(to: projectJSONURL)
+                                    print("✅ Saved project.json at: \(projectJSONURL.path)")
                                     
                                     // Create Firestore doc for the video
                                     let videoDocData: [String: Any] = [
