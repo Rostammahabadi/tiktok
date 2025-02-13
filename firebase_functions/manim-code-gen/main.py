@@ -128,7 +128,7 @@ def script_creation_gcf(request: Request):
         "       voice_id='pNInz6obpgDQGcFmaJgB',\n"
         "       voice_settings={'stability': 0.001, 'similarity_boost': 0.25}\n"
         "   ))\n"
-        "4) Break the provided script into short segments, each wrapped in a with self.voiceover(text=\"...\"): block, "
+        "4) Break the provided script into short segments, each wrapped in a 'with self.voiceover(text=\"...\"):'' block, "
         "   showing some textual or MathTex animations while the TTS is reading.\n"
         "5) Optimize for mobile (9:16) viewing by:\n"
         "   - Using font_size=28 or smaller for all Text and MathTex objects.\n"
@@ -140,8 +140,11 @@ def script_creation_gcf(request: Request):
         "6) End with a fade out or final message if the script includes a quiz.\n"
         "7) Return only valid Python code, with no disclaimers, no triple backticks, and no extra commentary.\n"
         "8) Make sure the import statement for ElevenLabsService always comes from 'manim_voiceover.services.elevenlabs'.\n"
-        "9) Do NOT use any method like 'wrap_lines' that may cause an AttributeError in the Text object. "
-        "   Handle line breaks by manually splitting the text or passing a 'width' argument to the constructor.\n"
+        "9) Do NOT use any method like 'wrap_lines' that may cause an AttributeError in Text objects. "
+        "   Handle line breaks by manually splitting the text or using a 'width' argument in the Text constructor.\n"
+        "10) Use only methods that exist in standard Manim and manim-voiceover. Do not call any deprecated or non-existent "
+        "   methods, attributes, or classes (e.g., no 'wrap_lines', no typos in function names). The final script must run "
+        "   successfully in a typical Manim environment without errors.\n"
     )
     user_prompt_2 = (
         f"Here is the TTS script:\n{script_text}\n\n"

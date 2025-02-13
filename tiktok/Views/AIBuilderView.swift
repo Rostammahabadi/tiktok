@@ -1,6 +1,8 @@
 import SwiftUI
 import FirebaseFunctions
 import FirebaseStorage
+import FirebaseAuth
+import FirebaseFirestore
 
 struct AIBuilderView: View {
     @Environment(\.dismiss) var dismiss
@@ -579,10 +581,14 @@ class AIBuilderViewModel: ObservableObject {
                        fileSize > 0 {
                         print("11. File exists with size: \(fileSize) bytes")
                         
+                        // Create project document first
+                        let projectRef = Firestore.firestore().collection("projects").document()
+                        let projectId = projectRef.documentID
+                        print("📝 Created project with ID: \(projectId)")
+                        
                         // Save video with metadata
                         do {
                             print("12. Starting video save with metadata...")
-                            let projectId = "ai_generated_videos"
                             let videoMetadata = VideoMetadata(
                                 startTime: 0.0,
                                 endTime: 180.0
@@ -595,6 +601,71 @@ class AIBuilderViewModel: ObservableObject {
                                 metadata: videoMetadata
                             )
                             print("13. Video saved successfully to: \(savedURL.path)")
+
+                            // Upload video and create project using the saved URL
+                            Task {
+                                do {
+                                    guard let userId = Auth.auth().currentUser?.uid else {
+                                        print("❌ No authenticated user")
+                                        return
+                                    }
+                                    
+                                    // Create video document first
+                                    let videoId = originalFileName.replacingOccurrences(of: ".mov", with: "")
+                                    let videoPath = "videos/original/\(videoId).mp4" // Match the path pattern from SaveVideoToRemoteURL
+                                    
+                                    // Generate thumbnail
+                                    print("📸 Generating thumbnail...")
+                                    let thumbnailData = try? await SaveVideoToLocalURL().generateThumbnail(from: savedURL)
+                                    var thumbnailURL: URL?
+                                    if let thumbnailData = thumbnailData {
+                                        // Save thumbnail to Firebase Storage
+                                        let thumbnailPath = "videos/thumbnails/\(videoId).jpg"
+                                        let thumbnailRef = Storage.storage().reference().child(thumbnailPath)
+                                        try await thumbnailRef.putDataAsync(thumbnailData)
+                                        thumbnailURL = try await thumbnailRef.downloadURL()
+                                        print("✅ Saved thumbnail to: \(thumbnailPath)")
+                                    }
+                                    
+                                    // Create Firestore doc for the video
+                                    let videoDocData: [String: Any] = [
+                                        "author_id": userId,
+                                        "project_id": projectId,
+                                        "originalPath": videoPath,
+                                        "thumbnailUrl": thumbnailURL?.absoluteString ?? NSNull(),
+                                        "created_at": FieldValue.serverTimestamp(),
+                                        "status": "processing", // Will be updated after HLS
+                                        "is_deleted": false,
+                                        "type": "main",
+                                        "order": 0
+                                    ]
+                                    
+                                    try await Firestore.firestore().collection("videos").document(videoId).setData(videoDocData)
+                                    print("✅ Created video document with ID: \(videoId)")
+                                    
+                                    // Create project document
+                                    let projectData: [String: Any] = [
+                                        "id": projectId,
+                                        "author_id": userId,
+                                        "created_at": FieldValue.serverTimestamp(),
+                                        "main_video_id": videoId,
+                                        "segment_ids": [videoId], // AI video is its own segment
+                                        "thumbnail_url": thumbnailURL?.absoluteString ?? NSNull(),
+                                        "is_deleted": false,
+                                        "type": "ai_generated"
+                                    ]
+                                    
+                                    try await projectRef.setData(projectData)
+                                    print("✅ Created project document")
+                                    
+                                    // Trigger HLS conversion using the correct path
+                                    SaveVideoToRemoteURL().convertToHLS(filePath: videoPath, videoId: videoId)
+                                    print("🎬 Triggered HLS conversion for video: \(videoId)")
+                                    
+                                } catch {
+                                    print("❌ Failed to create database records: \(error)")
+                                }
+                            }
                             
                             // Clean up temp file
                             try? FileManager.default.removeItem(at: localURL)

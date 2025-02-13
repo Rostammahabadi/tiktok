@@ -195,7 +195,7 @@ class SaveVideoToLocalURL {
     
     // MARK: - Helper: Generate Thumbnail
     
-    private func generateThumbnail(from videoURL: URL) async throws -> Data? {
+    public func generateThumbnail(from videoURL: URL) async throws -> Data? {
         let asset = AVURLAsset(url: videoURL)
         try await asset.load(.tracks)
         
