@@ -519,10 +519,10 @@ class AIBuilderViewModel: ObservableObject {
         }
     }
     
-    private func downloadAndSaveVideo(fromURL videoURL: String) async throws -> URL {
-        await updateProgress("Downloading video...")
+    public func downloadAndSaveVideo(fromURL videoURL: String) async throws -> URL {
+        print("=== DOWNLOAD PROCESS START ===")
+        print("1. Initial video URL: \(videoURL)")
         
-        // Convert gs:// URL to https:// URL for Firebase Storage
         let gsURL = videoURL.replacingOccurrences(of: "gs://", with: "")
         let components = gsURL.components(separatedBy: "/")
         guard components.count >= 2 else {
@@ -533,36 +533,108 @@ class AIBuilderViewModel: ObservableObject {
         let path = components.dropFirst().joined(separator: "/")
         let storageRef = storage.reference(forURL: "gs://\(bucket)").child(path)
         
-        let localURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("mov")
+        print("2. Firebase Storage reference created: \(storageRef.fullPath)")
         
-        _ = try await storageRef.write(toFile: localURL)
+        // Check tmp directory access
+        let tmpDirectory = FileManager.default.temporaryDirectory
+        print("3. Checking tmp directory: \(tmpDirectory.path)")
         
-        // Save video locally with metadata
-        await updateProgress("Saving video locally...")
-        let projectId = "ai_generated_videos"
-        let metadata = VideoMetadata(
-            startTime: 0.0,
-            endTime: 180.0
-        )
+        let isWritable = FileManager.default.isWritableFile(atPath: tmpDirectory.path)
+        print("4. Tmp directory writable: \(isWritable)")
         
-        let savedURL = try videoSaver.saveVideoWithMetadata(
-            from: localURL,
-            projectId: projectId,
-            videoId: UUID().uuidString,
-            metadata: metadata
-        )
-        
-        // Clean up temp file
-        try? FileManager.default.removeItem(at: localURL)
-        
-        // Successfully downloaded and saved video, update to complete
-        await MainActor.run {
-            generationProgress.currentStep = .complete
+        // Try to create a test file
+        let testFile = tmpDirectory.appendingPathComponent("test.txt")
+        do {
+            try "test".write(to: testFile, atomically: true, encoding: .utf8)
+            try FileManager.default.removeItem(at: testFile)
+            print("5. Successfully wrote and removed test file")
+        } catch {
+            print("5. ERROR: Failed to write test file: \(error.localizedDescription)")
         }
         
-        return savedURL
+        let originalFileName = path.components(separatedBy: "/").last ?? "\(UUID().uuidString).mov"
+        let localURL = tmpDirectory.appendingPathComponent(originalFileName)
+        
+        print("6. Will download to: \(localURL.path)")
+        
+        do {
+            print("7. Starting Firebase download...")
+            
+            // Try to get metadata first to confirm file exists in storage
+            let storageMetadata = try await storageRef.getMetadata()
+            print("8. File exists in storage with size: \(storageMetadata.size) bytes")
+            
+            // Create a download task
+            return try await withCheckedThrowingContinuation { continuation in
+                print("9. Creating download task...")
+                let downloadTask = storageRef.write(toFile: localURL)
+                
+                downloadTask.observe(.success) { snapshot in
+                    print("10. Download task completed successfully")
+                    
+                    // Verify file exists and has content
+                    if FileManager.default.fileExists(atPath: localURL.path),
+                       let attributes = try? FileManager.default.attributesOfItem(atPath: localURL.path),
+                       let fileSize = attributes[.size] as? Int64,
+                       fileSize > 0 {
+                        print("11. File exists with size: \(fileSize) bytes")
+                        
+                        // Save video with metadata
+                        do {
+                            print("12. Starting video save with metadata...")
+                            let projectId = "ai_generated_videos"
+                            let videoMetadata = VideoMetadata(
+                                startTime: 0.0,
+                                endTime: 180.0
+                            )
+                            
+                            let savedURL = try self.videoSaver.saveVideoWithMetadata(
+                                from: localURL,
+                                projectId: projectId,
+                                videoId: originalFileName.replacingOccurrences(of: ".mov", with: ""),
+                                metadata: videoMetadata
+                            )
+                            print("13. Video saved successfully to: \(savedURL.path)")
+                            
+                            // Clean up temp file
+                            try? FileManager.default.removeItem(at: localURL)
+                            
+                            // Update progress
+                            Task { @MainActor in
+                                self.generationProgress.currentStep = .complete
+                            }
+                            
+                            continuation.resume(returning: savedURL)
+                        } catch {
+                            continuation.resume(throwing: error)
+                        }
+                    } else {
+                        print("11. ERROR: File does not exist or is empty after download")
+                        continuation.resume(throwing: GenerationError.downloadFailed("File not found or empty after download"))
+                    }
+                }
+                
+                downloadTask.observe(.failure) { snapshot in
+                    if let error = snapshot.error as? NSError {
+                        print("ERROR: Download failed with error: \(error.localizedDescription)")
+                        continuation.resume(throwing: error)
+                    }
+                }
+                
+                downloadTask.observe(.progress) { snapshot in
+                    if let progress = snapshot.progress {
+                        let percentComplete = Double(progress.completedUnitCount) / Double(progress.totalUnitCount)
+                        // Safely handle progress percentage
+                        if percentComplete.isFinite {
+                            print("Download progress: \(Int(percentComplete * 100))%")
+                        }
+                    }
+                }
+            }
+        } catch {
+            print("ERROR during process: \(error.localizedDescription)")
+            throw error
+        }
     }
     
     private func handleError(_ error: Error) {
