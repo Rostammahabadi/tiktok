@@ -46,13 +46,13 @@ struct WelcomeView: View {
                              value: isAnimating)
                     .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                 
-                Text("TeacherTok")
+                Text("MathTok")
                     .font(.custom("Avenir-Heavy", size: 48))
                     .foregroundColor(.white)
                     .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 2)
                 
                 // Fun tagline with improved contrast
-                Text("Where Teaching Meets Fun! 🎓✨")
+                Text("Where Math Meets Fun! 🎓✨")
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .foregroundColor(.white)
                     .multilineTextAlignment(.center)
@@ -431,7 +431,7 @@ struct SignupView: View {
                             .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                             .padding(.top, 40)
                         
-                        Text("Join TeacherTok")
+                        Text("Join MathTok")
                             .font(.system(size: 28, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                             .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
@@ -533,7 +533,7 @@ struct SignupView: View {
                 setupFaceID()
             }
         } message: {
-            Text("Would you like to use Face ID to quickly and securely sign in to TeacherTok?")
+            Text("Would you like to use Face ID to quickly and securely sign in to MathTok?")
         }
         .fullScreenCover(isPresented: $showUsernameSelection) {
             if let authResult = authResult {

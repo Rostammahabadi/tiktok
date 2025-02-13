@@ -10,7 +10,7 @@ struct BiometricLoginView: View {
             TeacherLogo()
                 .frame(width: 120, height: 120)
             
-            Text("Welcome to TeacherTok")
+            Text("Welcome to MathTok")
                 .font(.title)
                 .fontWeight(.bold)
             

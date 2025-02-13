@@ -35,7 +35,7 @@ class BiometricAuthService: ObservableObject {
             // Attempt authentication
             let success = try await context.evaluatePolicy(
                 .deviceOwnerAuthenticationWithBiometrics,
-                localizedReason: "Sign in to TeacherTok"
+                localizedReason: "Sign in to MathTok"
             )
             
             await MainActor.run {

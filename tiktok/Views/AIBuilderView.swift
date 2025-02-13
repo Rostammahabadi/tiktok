@@ -712,7 +712,16 @@ class AIBuilderViewModel: ObservableObject {
                                     try await projectRef.setData(projectData)
                                     print("✅ Created project document")
                                     
-                                    // Trigger HLS conversion using the correct path
+                                    // Upload video to Firebase Storage
+                                    print("📤 Uploading video to Firebase Storage...")
+                                    let videoRef = Storage.storage().reference().child(videoPath)
+                                    let metadata = StorageMetadata()
+                                    metadata.contentType = "video/mp4"
+                                    
+                                    try await videoRef.putFileAsync(from: savedURL, metadata: metadata)
+                                    print("✅ Video uploaded successfully")
+                                    
+                                    // Now that the video is uploaded, trigger HLS conversion
                                     SaveVideoToRemoteURL().convertToHLS(filePath: videoPath, videoId: videoId)
                                     print("🎬 Triggered HLS conversion for video: \(videoId)")
                                     
